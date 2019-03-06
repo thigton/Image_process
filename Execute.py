@@ -1,7 +1,7 @@
 import glob
 import os
 import RAW_img
-import sys
+from collections import defaultdict
 
 
 
@@ -30,14 +30,13 @@ def get_image_fid(rel_imgs_dir, *img_ext):
         print(e)
 
 
-rel_imgs_dir = './190305/' # File path relative to the script
+rel_imgs_dir = './190228_2/' # File path relative to the script
 file_ids = get_image_fid(rel_imgs_dir, '.ARW')
 filenames = file_ids['.ARW']
-img = {}
+img = 
 for f in filenames:
-    print(f + ' being imported')
-    img[f] = RAW_img.Raw_img(rel_imgs_dir, f,save_green=True)
-    print('img: ' +str(sys.getsizeof(img)))
+    img[f] = RAW_img.Raw_img(rel_imgs_dir, f, save_red=True)
+
 
 #
 #

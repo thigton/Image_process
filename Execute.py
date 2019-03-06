@@ -2,7 +2,7 @@ import glob
 import os
 import RAW_img
 from collections import defaultdict
-
+import numpy as np
 
 
 def get_image_fid(rel_imgs_dir, *img_ext):
@@ -30,12 +30,22 @@ def get_image_fid(rel_imgs_dir, *img_ext):
         print(e)
 
 
-rel_imgs_dir = './190228_2/' # File path relative to the script
+rel_imgs_dir = './190305/' # File path relative to the script
 file_ids = get_image_fid(rel_imgs_dir, '.ARW')
+
+
 filenames = file_ids['.ARW']
-img = 
+
 for f in filenames:
-    img[f] = RAW_img.Raw_img(rel_imgs_dir, f, save_red=True)
+    count = 0
+    img = RAW_img.Raw_img(rel_imgs_dir, f) # import data
+    print(type(img.red))
+    img.black_offset()# black offset
+    xy = [500,500]
+    width = 1500
+    height = 1200
+    img.crop_img(xy,width,height,check_crop = True)#crop img
+    # save
 
 
 #

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as patches
 import sys
-import re
+
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
 
@@ -22,7 +22,7 @@ class Raw_img():
 			'aligned' : False}
 
 
-	def __init__(self,img_loc,filename,save_red = False):
+	def __init__(self,img_loc,filename):
 		os.chdir(os.path.dirname(__file__)) # Change working directory to the directory of this script
 		""" Import the raw file using rawpy """
 		self.raw_file_path = img_loc + filename + '.ARW'
@@ -35,14 +35,9 @@ class Raw_img():
 		# Get metadata
 		self.get_metadata()
 		#Import jpeg
-		self.jpg = mpimg.imread(os.path.join(os.path.dirname(img_loc + filename + '.JPG'), filename + '.JPG'))
+		#self.jpg = mpimg.imread(os.path.join(os.path.dirname(img_loc + filename + '.JPG'), filename + '.JPG'))
 		# Split into rgb channels
 		self.rgb_channels()
-		# Save red channel to file
-		if save_red == True:
-			if not os.path.exists(img_loc + 'red_channel/'):
-				os.makedirs(img_loc + 'red_channel/')
-			self.disp_img(disp = False, save = True)
 		# Get sizes
 		self.get_size(x)
 		x.close()
@@ -56,7 +51,7 @@ class Raw_img():
 			# remove the text before the colon in the keys
 			new_key = key.split(':')[-1]
 			self.metadata[new_key] = md[key]
-		md = None
+		del(md)
 		# Important key values
 		# - BitsPerSample
 		# - ISO
@@ -82,8 +77,8 @@ class Raw_img():
 		self.red = self.raw_image[::2, ::2]
 		self.green = np.array(((self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
 		self.blue = self.raw_image[1::2,1::2]
-		print('self.red (' + str(self.red.shape) + ' self.green ' + str(self.green.shape)  
-		+' self.blue ' + str(self.blue.shape) +' successfully created')
+		#print('self.red (' + str(self.red.shape) + ' self.green ' + str(self.green.shape)  
+		#+' self.blue ' + str(self.blue.shape) +' successfully created')
 
 
 
@@ -116,7 +111,7 @@ class Raw_img():
 
 
 
-	def crop_img(self, xy , width, height, check_crop = False, save_red = False):
+	def crop_img(self, xy , width, height, check_crop = False, save_red = False, save_green = False):
 
 		"""Crops the image to the space you want, if check_crop = True, the image will be displayed 
 		and you have the option of re aligning if you want """
@@ -155,7 +150,7 @@ class Raw_img():
 		self.crop_height = height
 		if check_crop == True:
 			plt.ion()
-			fig,ax = plt.subplots(1)
+			ax = plt.axes()
 			ax.imshow(self.red)
 			rect = patches.Rectangle( (self.crop_xy[0], self.crop_xy[1]), self.crop_width, self.crop_height, linewidth = 1, edgecolor='r', facecolor = 'none')
 			ax.add_patch(rect)
@@ -185,15 +180,11 @@ class Raw_img():
 			self.status['cropped'] = True
 
 		"""OPTION: Save the red channel to png to view"""
+		# Save red channel to file
 		if save_red == True:
-			fig = plt.figure()
-			plt.imshow(self.crop_red, aspect = 'equal', cmap = 'gray')
-			plt.axis('off')
-			plt_name = self.img_loc + 'red_channel/crop' + self.filename + '.png'
-			fig.savefig(plt_name)
-
-
-
+			self.disp_img(disp = False, save = True, channel = 'red')
+		if save_green == True:
+			self.disp_img(disp = False, save = True, channel = 'red')
 
 			
 	def disp_img(self, disp = True, crop = False, save = False, channel = 'red', colormap = 'gray'):
@@ -201,22 +192,12 @@ class Raw_img():
 		OPTIONS - 	disp - True - whether to actually display the image or not
 					crop = True - cropped as by crop_img False - Full image
 					save - False - save one of the channels
-					channel = red, green, blue
+					channel = string - red, green, blue
 					colormap - control the colors of the image - default is grayscale"""
-
-		colors = ['red','green','blue']
-		# check inputs
-		if not isinstance(crop, bool):
-			sys.exit('Image can''t be displayed. Please enter True or False for crop')
-		if not isinstance(channel, str):
-			sys.exit('Image can''t be displayed. Please enter string red, green or blue for channel')
-		if channel not in colors:
-			sys.exit('Image can--t be displayed.  Please enter string red, green or blue for channel')
 		
 		fig = plt.figure()
 		if crop == False:
 			plt.imshow(getattr(self,channel), aspect = 'equal', cmap = colormap)
-			
 		else:
 			crop_channel = 'crop_' + channel
 			plt.imshow(getattr(self, crop_channel), aspect = 'equal', cmap = colormap)
@@ -224,11 +205,13 @@ class Raw_img():
 		plt.title(channel.capitalize()+ ' channel')
 		
 		if save == True:
-			plt_name = self.img_loc + 'red_channel/' + self.filename + '.png'
+			if not os.path.exists(self.img_loc + channel + '_channel/'):
+				os.makedirs(self.img_loc + channel + '_channel/')
+			plt_name = self.img_loc + channel + '_channel/' + self.filename + '.png'
 			fig.savefig(plt_name)
 		if disp == True:
 			plt.show()
-
+		del(fig)
 
 
 	def black_offset(self, method = 0, *blk_imgs):
@@ -237,12 +220,11 @@ class Raw_img():
 		method = 0 (default) use the metadata in the image 
 		method = 1 use 1 or a series of black images"""
 		if method == 0 :
-			Black_Level = [self.metadata['BlackLevel'].split()]
-			Black_level = Black_level.mean()
-			self.raw_image -= Black_Level
-			self.red -= Black_Level
-			self.green -= Black_Level
-			self.blue  -= Black_Level
+			Black_Level = np.array(list(map(int,self.metadata['BlackLevel'].split()))).mean()
+			self.raw_image = np.subtract(self.raw_image, np.ones_like(self.raw_image)* Black_Level)
+			self.red = np.subtract(self.red,  np.ones_like(self.red)* Black_Level)
+			self.green = np.subtract(self.green,  np.ones_like(self.green)* Black_Level)
+			self.blue = np.subtract(self.blue,  np.ones_like(self.blue)* Black_Level)
 		elif method == 1:
 			sys.exit('Code hasn''t yet been written!')
 

@@ -11,7 +11,7 @@ import sys
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
 
-class Raw_img():
+class image_process():
 
 	"""Status of different functions"""
 	status = {'undistorted': False , 
@@ -22,31 +22,41 @@ class Raw_img():
 			'aligned' : False}
 
 
-	def __init__(self,img_loc,filename):
+	def __init__(self,img_loc,filename,ext = '.ARW'):
+		""" Import the raw file using rawpy
+		img_loc = str - relative to this file...I think
+		filename = str - as explained
+		ext = str - file extension - default is .ARW but can do .JPG """
+
+
 		os.chdir(os.path.dirname(__file__)) # Change working directory to the directory of this script
-		""" Import the raw file using rawpy """
-		self.raw_file_path = img_loc + filename + '.ARW'
+		self.file_path = img_loc + filename + ext
 
 		self.img_loc = img_loc
 		self.filename = filename
-		x = rawpy.imread(self.raw_file_path) # raw file is imported using rawpy
-
-		self.raw_image = x.raw_image
+		if ext == '.ARW':
+			x = rawpy.imread(self.file_path) # raw file is imported using rawpy
+			self.raw_image = x.raw_image
+			x.close()
+		elif ext == '.JPG':
+			self.raw_image = mpimg.imread(os.path.join(os.path.dirname(self.file_path), filename + ext))
+		# Split into rgb channels
+		self.rgb_channels(ext)
 		# Get metadata
 		self.get_metadata()
-		#Import jpeg
-		#self.jpg = mpimg.imread(os.path.join(os.path.dirname(img_loc + filename + '.JPG'), filename + '.JPG'))
-		# Split into rgb channels
-		self.rgb_channels()
 		# Get sizes
-		self.get_size(x)
-		x.close()
+		self.get_size()
+		
+		
+		
+
+
 
 	def get_metadata(self):
 		"""Get Image Metadata and clean"""
 		self.metadata = {}
 		with exiftool.ExifTool() as et: 
-			md = et.get_metadata(self.raw_file_path)
+			md = et.get_metadata(self.file_path)
 		for key in md.keys():
 			# remove the text before the colon in the keys
 			new_key = key.split(':')[-1]
@@ -62,21 +72,28 @@ class Raw_img():
 		# - Model
 		# - DistortionCorrectionSetting
 		# - BlackLevel
+		# - Time image captured
 		
 
-	def get_size(self,x):
+	def get_size(self):
 		"""Get size of image"""
-		self.width = x.sizes.raw_width
-		self.heigth = x.sizes.raw_height
+		self.width = self.raw_image.shape[1]
+		self.height = self.raw_image.shape[0]
 
 
 
-	def rgb_channels(self):
+	def rgb_channels(self,ext = '.ARW'):
 		
-		""" Create Red, Green and Blue Arrays """
-		self.red = self.raw_image[::2, ::2]
-		self.green = np.array(((self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
-		self.blue = self.raw_image[1::2,1::2]
+		""" Create Red, Green and Blue Arrays
+		ext = str. file extension default is raw file, can also have .JPG """
+		if ext == '.ARW':
+			self.red = self.raw_image[::2, ::2]
+			self.green = np.array(((self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
+			self.blue = self.raw_image[1::2,1::2]
+		elif ext == '.JPG':
+			self.red = self.raw_image[:,:,0]
+			self.green = self.raw_image[:,:,1]
+			self.blue = self.raw_image[:,:,2]
 		#print('self.red (' + str(self.red.shape) + ' self.green ' + str(self.green.shape)  
 		#+' self.blue ' + str(self.blue.shape) +' successfully created')
 
@@ -117,15 +134,15 @@ class Raw_img():
 		and you have the option of re aligning if you want """
 
 		# Check we are doing things in the right order....
-		if self.status['undistorted'] != True:
-			sys.exit('Image needs to be undistorted before cropping')
-		if self.status['cropped'] != False:
-			response = input('Image has already been cropped, do you want to overwrite? [Y/N]')
-			if 'y' not in response.lower():
-				print('continue with existing cropped image...')
-				return
-		if self.status['black_level'] != True:
-			sys.exit('Image should be black-offset before cropping')
+		#if self.status['undistorted'] != True:
+		#	sys.exit('Image needs to be undistorted before cropping')
+		#if self.status['cropped'] != False:
+		#	response = input('Image has already been cropped, do you want to overwrite? [Y/N]')
+		#	if 'y' not in response.lower():
+		#		print('continue with existing cropped image...')
+		#		return
+		#if self.status['black_level'] != True:
+		#	sys.exit('Image should be black-offset before cropping')
 
 		# Check input is correct
 		input_error = False
@@ -152,7 +169,7 @@ class Raw_img():
 			plt.ion()
 			ax = plt.axes()
 			ax.imshow(self.red)
-			rect = patches.Rectangle( (self.crop_xy[0], self.crop_xy[1]), self.crop_width, self.crop_height, linewidth = 1, edgecolor='r', facecolor = 'none')
+			rect = patches.Rectangle( (xy[0], xy[1]), width, height, linewidth = 1, edgecolor='r', facecolor = 'none')
 			ax.add_patch(rect)
 			response = input('Are you happy with the crop area?  Do you want to continue? [Y/N]')
 			if 'y' in response.lower():
@@ -169,6 +186,11 @@ class Raw_img():
 					ax.add_patch(rect)
 					plt.draw()
 					response = input('Are you happy with the crop area?  Do you want to continue? [Y/N]')
+				# Save the crop coordinates
+				self.crop_xy = XY
+				self.crop_width = WIDTH
+				self.crop_height = HEIGHT
+				# rerun the function
 				self.crop_img(XY, WIDTH, HEIGHT, check_crop = False)
 		else:
 			# Make the crops
@@ -176,6 +198,7 @@ class Raw_img():
 			self.crop_red = self.red[self.crop_xy[1]:(self.crop_xy[1] + self.crop_height) , self.crop_xy[0]: (self.crop_xy[0] + self.crop_width)]
 			self.crop_green = self.green[self.crop_xy[1]:(self.crop_xy[1] + self.crop_height) , self.crop_xy[0]: (self.crop_xy[0] + self.crop_width)]
 			self.crop_blue= self.blue[self.crop_xy[1]:(self.crop_xy[1] + self.crop_height) , self.crop_xy[0]: (self.crop_xy[0] + self.crop_width)]
+			# housekeeping
 			print('Crop successful')
 			self.status['cropped'] = True
 
@@ -195,23 +218,22 @@ class Raw_img():
 					channel = string - red, green, blue
 					colormap - control the colors of the image - default is grayscale"""
 		
-		fig = plt.figure()
-		if crop == False:
-			plt.imshow(getattr(self,channel), aspect = 'equal', cmap = colormap)
-		else:
-			crop_channel = 'crop_' + channel
-			plt.imshow(getattr(self, crop_channel), aspect = 'equal', cmap = colormap)
-		plt.axis('off')
-		plt.title(channel.capitalize()+ ' channel')
+	
+		if disp == True:
+			if crop == False:
+				plt.imshow(getattr(self,channel), aspect = 'equal', cmap = colormap)
+			else:
+				crop_channel = 'crop_' + channel
+				plt.imshow(getattr(self, crop_channel), aspect = 'equal', cmap = colormap)
+			plt.axis('off')
+			plt.title(channel.capitalize()+ ' channel')
 		
 		if save == True:
 			if not os.path.exists(self.img_loc + channel + '_channel/'):
 				os.makedirs(self.img_loc + channel + '_channel/')
+			
 			plt_name = self.img_loc + channel + '_channel/' + self.filename + '.png'
-			fig.savefig(plt_name)
-		if disp == True:
-			plt.show()
-		del(fig)
+			plt.imsave(plt_name,getattr(self, 'crop_' +channel), cmap = colormap)
 
 
 	def black_offset(self, method = 0, *blk_imgs):

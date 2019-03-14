@@ -30,20 +30,14 @@ def get_image_fid(rel_imgs_dir, *img_ext):
         print(e)
 
 
-<<<<<<< HEAD
 rel_imgs_dir = './Data/190305/' # File path relative to the script
 file_ids = get_image_fid(rel_imgs_dir, '.ARW')
 
-=======
-rel_imgs_dir = './190307_2/' # File path relative to the script
-file_ids = get_image_fid(rel_imgs_dir, '.JPG')
->>>>>>> d724a36461785a95e0a28c278c32572e8845119d
 
 
-filenames = file_ids['.JPG']
+filenames = file_ids['.ARW']
 count = 0
 for f in filenames:
-<<<<<<< HEAD
     count = 0
     img = RAW_img.Raw_img(rel_imgs_dir, f) # import data
     print(type(img.red))
@@ -52,26 +46,6 @@ for f in filenames:
     width = 1500
     height = 1200
     img.crop_img(xy,width,height,check_crop = True)#crop img
-=======
-    img = RAW_img.image_process(rel_imgs_dir, f,ext = '.JPG') # import data
-    #print(img.raw_image.shape)
-    #print(img.raw_image[:,:,0].shape)
-    #pprint.pprint(img.metadata)
-   # img.black_offset()# black offset
-   # Initial crop guesses
-    if count == 0 : # Check crop size on the first image
-        xy = [3500,300]
-        width = 4000
-        height = 3000
-        img.crop_img(xy,width,height,check_crop = True)#crop img
-        xy = img.crop_xy
-        width = img.crop_width
-        height = img.crop_height
-        count += 1
-    else:
-        img.crop_img(xy, width, height)
-        count += 1
->>>>>>> d724a36461785a95e0a28c278c32572e8845119d
     # save
     img.disp_img(disp = False, crop= True, save = True, channel = 'green')
 

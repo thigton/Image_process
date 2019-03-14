@@ -11,7 +11,7 @@ import sys
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
 
-class image_process():
+class Raw_img():
 
 	"""Status of different functions"""
 	status = {'undistorted': False , 
@@ -82,13 +82,6 @@ class image_process():
 
 
 
-<<<<<<< HEAD
-	def rgb_channels(self):
-		""" Create Red, Green and Blue Arrays """
-		self.red = self.raw_image[::2, ::2]
-		self.green = np.array(((self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
-		self.blue = self.raw_image[1::2,1::2]
-=======
 	def rgb_channels(self,ext = '.ARW'):
 		
 		""" Create Red, Green and Blue Arrays
@@ -101,7 +94,6 @@ class image_process():
 			self.red = self.raw_image[:,:,0]
 			self.green = self.raw_image[:,:,1]
 			self.blue = self.raw_image[:,:,2]
->>>>>>> d724a36461785a95e0a28c278c32572e8845119d
 		#print('self.red (' + str(self.red.shape) + ' self.green ' + str(self.green.shape)  
 		#+' self.blue ' + str(self.blue.shape) +' successfully created')
 
@@ -139,11 +131,6 @@ class image_process():
 	def crop_img(self, xy , width, height, check_crop = False, save_red = False, save_green = False):
 		"""Crops the image to the space you want, if check_crop = True, the image will be displayed 
 		and you have the option of re aligning if you want """
-<<<<<<< HEAD
-=======
-
-		# Check we are doing things in the right order....
->>>>>>> d724a36461785a95e0a28c278c32572e8845119d
 		#if self.status['undistorted'] != True:
 		#	sys.exit('Image needs to be undistorted before cropping')
 		#if self.status['cropped'] != False:
@@ -153,26 +140,6 @@ class image_process():
 		#		return
 		#if self.status['black_level'] != True:
 		#	sys.exit('Image should be black-offset before cropping')
-<<<<<<< HEAD
-=======
-
-		# Check input is correct
-		input_error = False
-		if not isinstance(xy, list):
-			print('Top left corrdinate of crop should be a list')
-			input_error = True
-		if not isinstance(width,int):
-			print('width should be an integer')
-			input_error = True
-		if not isinstance(height,int):
-			print('Height should be an integer')
-			input_error = True
-		if len(xy) != 2:
-			print('Top left corrdinate should have 2 values (x,y)')
-			input_error = True
-		if input_error == True:
-			sys.exit('Please input valid arguments for width an height')
->>>>>>> d724a36461785a95e0a28c278c32572e8845119d
 		
 		# Input the 
 		self.crop_xy = xy

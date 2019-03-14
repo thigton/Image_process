@@ -72,7 +72,6 @@ class Raw_img():
 
 
 	def rgb_channels(self):
-		
 		""" Create Red, Green and Blue Arrays """
 		self.red = self.raw_image[::2, ::2]
 		self.green = np.array(((self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
@@ -112,37 +111,17 @@ class Raw_img():
 
 
 	def crop_img(self, xy , width, height, check_crop = False, save_red = False, save_green = False):
-
 		"""Crops the image to the space you want, if check_crop = True, the image will be displayed 
 		and you have the option of re aligning if you want """
-
-		# Check we are doing things in the right order....
-		if self.status['undistorted'] != True:
-			sys.exit('Image needs to be undistorted before cropping')
-		if self.status['cropped'] != False:
-			response = input('Image has already been cropped, do you want to overwrite? [Y/N]')
-			if 'y' not in response.lower():
-				print('continue with existing cropped image...')
-				return
-		if self.status['black_level'] != True:
-			sys.exit('Image should be black-offset before cropping')
-
-		# Check input is correct
-		input_error = False
-		if not isinstance(xy, list):
-			print('Top left corrdinate of crop should be a list')
-			input_error = True
-		if not isinstance(width,int):
-			print('width should be an integer')
-			input_error = True
-		if not isinstance(height,int):
-			print('Height should be an integer')
-			input_error = True
-		if len(xy) != 2:
-			print('Top left corrdinate should have 2 values (x,y)')
-			input_error = True
-		if input_error == True:
-			sys.exit('Please input valid arguments for width an height')
+		#if self.status['undistorted'] != True:
+		#	sys.exit('Image needs to be undistorted before cropping')
+		#if self.status['cropped'] != False:
+		#	response = input('Image has already been cropped, do you want to overwrite? [Y/N]')
+		#	if 'y' not in response.lower():
+		#		print('continue with existing cropped image...')
+		#		return
+		#if self.status['black_level'] != True:
+		#	sys.exit('Image should be black-offset before cropping')
 		
 		# Input the 
 		self.crop_xy = xy

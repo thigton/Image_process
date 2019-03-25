@@ -1,9 +1,9 @@
 import glob
 import os
 import RAW_img
-from collections import defaultdict
 import numpy as np
 import pprint
+import matplotlib.pyplot as plt
 
 def get_image_fid(rel_imgs_dir, *img_ext):
     """Function to get a list of file IDs to import.
@@ -30,58 +30,143 @@ def get_image_fid(rel_imgs_dir, *img_ext):
         print(e)
 
 
-rel_imgs_dir = './Data/190305/' # File path relative to the script
-file_ids = get_image_fid(rel_imgs_dir, '.ARW')
+def background_img_mean(bg_imgs):
+    '''returns a list of np.array of mean rgb channels from the input images'''
+    # if the background images need black level offsetting
+    if (bg_imgs[0].status['black_level'] == False) and (bg_imgs[0].ext == 'ARW') : 
+        bg_imgs = [img.black_offset() for img in bg_imgs]
+    
+    result = []
+    for color in ['red', 'green', 'blue']:
+        BG = np.zeros( (getattr(bg_imgs[0], 'crop_' + color).shape) ) # empty array
+        for img in bg_imgs:
+            BG += getattr(img,'crop_' + color) # add image channel
+        BG /= len(bg_imgs) # divide by length
+        result.append(BG)
+    return result # need to return both the mean
+
+
+def crop_background_imgs(bg_imgs):
+    '''crops the background images
+    bg_imgs should be a list of RAW_img class objects'''
+    crop_pos = bg_imgs[0].choose_crop() 
+    for img in bg_imgs:
+        img.crop_img(crop_pos) #crop images
+    return crop_pos
+    
+    
+def prep_background_imgs(bg_imgs):
+    '''Calls the functions above to apply to the list of backgrounnd images'''
+    crop_pos = crop_background_imgs(bg_imgs)
+    bg_mean = background_img_mean(bg_imgs)
+    return (bg_mean, crop_pos)
 
 
 
-filenames = file_ids['.ARW']
-count = 0
-for f in filenames:
+
+#-------------------------------------------#
+
+if __name__ == '__main__':
+
+    # Chose Parameters
+    rel_imgs_dir = './Data/190228_2/' # File path relative to the script
+    file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
+
+
+    # Get list of file names
+    file_ids = get_image_fid(rel_imgs_dir, file_ext)
+    filenames = file_ids[file_ext]
+
+    # Get background images
+    BG_ids = get_image_fid(rel_imgs_dir + 'BG/', file_ext)
+    BG_filenames = BG_ids[file_ext]
+
+    #crop background imgs and get crop_pos  
+    (BG, crop_pos) = prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
+    print (np.amin(BG[0]) )
+    print (np.unravel_index (np.argmin(BG[0], axis=None) , BG[0].shape) )
+    #plt.imshow(BG[0], aspect = 'equal', cmap = 'gray')
+    #plt.show()
+    
+    #----------------------------------------------------------------
+
     count = 0
-    img = RAW_img.Raw_img(rel_imgs_dir, f) # import data
-    print(type(img.red))
-    #img.black_offset()# black offset
-    xy = [500,500]
-    width = 1500
-    height = 1200
-    img.crop_img(xy,width,height,check_crop = True)#crop img
-    # save
-    img.disp_img(disp = False, crop= True, save = True, channel = 'green')
+    for f in filenames:
+        # Image preprocessing ========================
+
+         # import image
+        img = RAW_img.Raw_img(rel_imgs_dir, f, file_ext)
+
+        # realign
+
+        # undistort
+
+         #crop image
+        img.crop_img(crop_pos)
+
+        # black offset
+        #img.black_offset()
+
+        #normalise images
+        img.normalise(BG) 
+
+        # convert pixels to a real life scale
+
+        # dye calibration
+
+        # Image analysis ============================
+
+        # split into vertical strips to analyse
+        if count == 0:
+            analysis_area = img.choose_crop()
+        
+        # get 1d density distribution
+
+        # get the interface position
+
+
+    #    if count % 10 == 0:
+        #    img.save_histogram()
+
+        # save cropped red image
+        img.disp_img(disp = False, crop= True, save = True, channel = 'red')
+
+        # housekeeping
+        print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed')
+        count += 1
+
+
+    #
+    #
+    #for keys, values in img1.metadata.items():
+    #    print(str(keys) + '  :   ' + str(values))
+    #
+    #
+    #print(img1.metadata['BlackLevel'].split())
+    #print(type(img1.metadata['BlackLevel'].split()[0]))
+    #img1.save_histogram()
+    #xy = [2000,200]
+    #width = 1500
+    #height = 1100
+    #img1.crop_img(xy, width, height, save_red=False)
+
+    #plt.imshow(img1.crop_red, aspect = 'equal')
+    #plt.show()
+    #plt.axis('off')
 
 
 
-#
-#
-#for keys, values in img1.metadata.items():
-#    print(str(keys) + '  :   ' + str(values))
-#
-#
-#print(img1.metadata['BlackLevel'].split())
-#print(type(img1.metadata['BlackLevel'].split()[0]))
-#img1.save_histogram()
-#xy = [2000,200]
-#width = 1500
-#height = 1100
-#img1.crop_img(xy, width, height, save_red=False)
+    #img1.save_histogram(crop=True)
+    #img1.save_histogram(crop=False)
 
-#plt.imshow(img1.crop_red, aspect = 'equal')
-#plt.show()
-#plt.axis('off')
+    #try:
+    #	#img1.disp_histogram()
+    #	print(img1.size)
+    #except NameError as e:
+    #	print(str(e) + ' as an')
+    #except AttributeError as e:
+    #	print(e)
+    #print(dir(img1))
 
-
-
-#img1.save_histogram(crop=True)
-#img1.save_histogram(crop=False)
-
-#try:
-#	#img1.disp_histogram()
-#	print(img1.size)
-#except NameError as e:
-#	print(str(e) + ' as an')
-#except AttributeError as e:
-#	print(e)
-#print(dir(img1))
-
-#print(type(img1.raw_image[0,0]))
-#print(type(img2[0]))
+    #print(type(img1.raw_image[0,0]))
+    #print(type(img2[0]))

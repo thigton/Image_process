@@ -1,6 +1,12 @@
 #Dont track content of these folders
 /Data/
 
+# No jpgs arw png or matlab files
+**/*.JPG
+**/*.ARW
+**/*.png
+**/*.m
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

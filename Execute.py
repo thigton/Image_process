@@ -123,7 +123,7 @@ if __name__ == '__main__':
 
         
         # get 1d density distribution
-        density_profiles = RAW_img.one_d_density(strips)
+        density_profiles = RAW_img.one_d_density(strips,10)
         print(density_profiles.head())
         print(density_profiles.shape)
         # get the interface position

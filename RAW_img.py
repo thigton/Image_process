@@ -327,7 +327,7 @@ def define_analysis_strips(img, analysis_area, strip_width, channel = 'red', dis
 		if not os.path.exists(img.img_loc + 'analysis/'):
 			os.makedirs(img.img_loc + 'analysis/')
 		plt.savefig(img.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
-
+		plt.close()
 
 	return { str(strip_label[i]) : getattr(img,channel)[ analysis_area[0][1]:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
 	
@@ -338,10 +338,19 @@ def one_d_density(strips, n = 10):
 	produces plot, or horizontally average values
 	smoothness = number of pixels to do a moving average '''
 	df = pd.DataFrame(columns = strips.keys())
+	
 	for k, v in strips.items():
+		# horizontal mean of each strip
 		df[k] = pd.Series(np.mean(v, axis = 1))
-		#density_profile_raw[k] = np.mean(v, axis = 0)
-		#density_profile_smooth[k] = 
+
+		# smoothed out noise with moving average
+		df[k + '_' + str(n)]= df[k].rolling( n, min_periods = 1, center = True ).mean()
+		plt.plot(df[k],np.arange(len(df[k]) ), label = k )
+	plt.legend()
+	plt.show()
+		# Save a figure
+
+
 	return df
 
 

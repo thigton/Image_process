@@ -77,6 +77,7 @@ if __name__ == '__main__':
     file_ids = get_image_fid(rel_imgs_dir, file_ext)
     filenames = file_ids[file_ext]
 
+
     # Get background images
     BG_ids = get_image_fid(rel_imgs_dir + 'BG/', file_ext)
     BG_filenames = BG_ids[file_ext]
@@ -87,7 +88,7 @@ if __name__ == '__main__':
     #plt.show()
     
     #----------------------------------------------------------------
-
+    
     count = 0
     for f in filenames[::-1]: # Analyse in reverse so that the crop images are of the steady state
         # Image preprocessing ========================
@@ -117,23 +118,24 @@ if __name__ == '__main__':
         # split into vertical strips to analyse
         if count == 0:
             analysis_area = img.choose_crop()
-            strips = RAW_img.define_analysis_strips(img, analysis_area, 400, display=True)
+            img.define_analysis_strips(analysis_area, 400, display=True)
         else:
-            strips  = RAW_img.define_analysis_strips(img, analysis_area, 400)
+            img.define_analysis_strips(analysis_area, 400)
 
         
         # get 1d density distribution
-        density_profiles = RAW_img.one_d_density(strips,10)
-        print(density_profiles.head())
-        print(density_profiles.shape)
+        img.one_d_density(10)
+        # print(density_profiles.head())
+        # print(density_profiles.shape)
+
         # get the interface position
-        exit()
+        
 
     #    if count % 10 == 0:
         #    img.save_histogram()
 
         # save cropped red image
-        img.disp_img(disp = False, crop= True, save = True, channel = 'red')
+        #img.disp_img(disp = False, crop= True, save = True, channel = 'red')
 
         # housekeeping
         print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed')

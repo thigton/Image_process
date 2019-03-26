@@ -295,63 +295,60 @@ class Raw_img():
 
 
 
-def define_analysis_strips(img, analysis_area, strip_width, channel = 'red', display = False):
-	'''defines an area of processed image of channel ... to analyse.
-	returns a dictionary of strip section and the np.array sitting in value
-	img = RAW_img class object
-	analysis_area = tuple from choose_crop() total area to analyse
-	strip_width = int in pixels'''
-	number_of_strips = m.floor(analysis_area[1] / strip_width) # find maximum number of stips based on spacing and width
-	x1 = analysis_area[0][0]
-	y1 = analysis_area[0][1]
-	# x,y bottom right corner
-	x2 = analysis_area[0][0] + number_of_strips*strip_width 
-	y2 = analysis_area[0][1] + analysis_area[2] # y-coordinate
-	strip_interfaces = [int(i) for i in np.linspace(analysis_area[0][0], x2, number_of_strips+1)]
-
-	if display == True:
-		plt.ion()
-		ax = plt.axes()
-		ax.imshow(getattr(img, channel))
-		rect1 = patches.Rectangle( (x1, y1), (x2-x1), (y2-y1), linewidth = 1, edgecolor='r', facecolor = 'none')
-		ax.add_patch(rect1)
+	def define_analysis_strips(self, analysis_area, strip_width, channel = 'red', display = False):
+		'''defines an area of processed image of channel ... to analyse.
+		returns a dictionary of strip section and the np.array sitting in value
+		img = RAW_img class object
+		analysis_area = tuple from choose_crop() total area to analyse
+		strip_width = int in pixels'''
+		number_of_strips = m.floor(analysis_area[1] / strip_width) # find maximum number of stips based on spacing and width
+		x1 = analysis_area[0][0]
+		y1 = analysis_area[0][1]
+		# x,y bottom right corner
+		x2 = analysis_area[0][0] + number_of_strips*strip_width 
+		y2 = analysis_area[0][1] + analysis_area[2] # y-coordinate
+		strip_interfaces = [int(i) for i in np.linspace(analysis_area[0][0], x2, number_of_strips+1)]
 		strip_label = range(number_of_strips) # counter for the strips
-		j = 0
-		for i in strip_interfaces[:-1]:
-			l = Line2D( [i,i], [y1,y2] , linewidth = 1, color = 'r')
-			ax.add_line(l)
-			plt.text( i + round(strip_width/2) , stats.mean([y1,y2]) , str(strip_label[j]), color = 'r' )
-			plt.draw()
-			j += 1
-		plt.ioff()
-		if not os.path.exists(img.img_loc + 'analysis/'):
-			os.makedirs(img.img_loc + 'analysis/')
-		plt.savefig(img.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
+		if display == True:
+			plt.ion()
+			ax = plt.axes()
+			ax.imshow(getattr(self, channel))
+			rect1 = patches.Rectangle( (x1, y1), (x2-x1), (y2-y1), linewidth = 1, edgecolor='r', facecolor = 'none')
+			ax.add_patch(rect1)
+			j = 0
+			for i in strip_interfaces[:-1]:
+				l = Line2D( [i,i], [y1,y2] , linewidth = 1, color = 'r')
+				ax.add_line(l)
+				plt.text( i + round(strip_width/2) , stats.mean([y1,y2]) , str(strip_label[j]), color = 'r' )
+				plt.draw()
+				j += 1
+			plt.ioff()
+			if not os.path.exists(self.img_loc + 'analysis/'):
+				os.makedirs(self.img_loc + 'analysis/')
+			plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
+			plt.close()
+
+		self.strips =  { str(strip_label[i]) : getattr(self,channel)[ analysis_area[0][1]:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
+
+
+
+	def one_d_density(self, n = 10):
+		'''takes in a dictionary containing np.arrays (strips),
+		produces plot, or horizontally average values
+		smoothness = number of pixels to do a moving average '''
+		self.rho = pd.DataFrame(columns = self.strips.keys())
+
+		for k, v in self.strips.items():
+			# horizontal mean of each strip
+			self.rho[k] = pd.Series(np.mean(v, axis = 1))
+
+			# smoothed out noise with moving average
+			self.rho[k + '_' + str(n)]= self.rho[k].rolling( n, min_periods = 1, center = True ).mean()
+			plt.plot(self.rho[k],np.arange(len(self.rho[k]) ), label = k )
+		plt.legend()
+			# Save a figure
+		plt.savefig(self.img_loc + 'analysis/rho_profile_' + self.filename + '.png')
 		plt.close()
-
-	return { str(strip_label[i]) : getattr(img,channel)[ analysis_area[0][1]:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
-	
-
-
-def one_d_density(strips, n = 10):
-	'''takes in a dictionary containing np.arrays (strips),
-	produces plot, or horizontally average values
-	smoothness = number of pixels to do a moving average '''
-	df = pd.DataFrame(columns = strips.keys())
-	
-	for k, v in strips.items():
-		# horizontal mean of each strip
-		df[k] = pd.Series(np.mean(v, axis = 1))
-
-		# smoothed out noise with moving average
-		df[k + '_' + str(n)]= df[k].rolling( n, min_periods = 1, center = True ).mean()
-		plt.plot(df[k],np.arange(len(df[k]) ), label = k )
-	plt.legend()
-	plt.show()
-		# Save a figure
-
-
-	return df
 
 
 

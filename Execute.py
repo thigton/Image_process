@@ -38,9 +38,9 @@ def background_img_mean(bg_imgs):
     
     result = []
     for color in ['red', 'green', 'blue']:
-        BG = np.zeros( (getattr(bg_imgs[0], 'crop_' + color).shape) ) # empty array
+        BG = np.zeros( (getattr(bg_imgs[0], color).shape) ) # empty array
         for img in bg_imgs:
-            BG += getattr(img,'crop_' + color) # add image channel
+            BG += getattr(img, color) # add image channel
         BG /= len(bg_imgs) # divide by length
         result.append(BG)
     return result # need to return both the mean
@@ -83,15 +83,13 @@ if __name__ == '__main__':
 
     #crop background imgs and get crop_pos  
     (BG, crop_pos) = prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
-    print (np.amin(BG[0]) )
-    print (np.unravel_index (np.argmin(BG[0], axis=None) , BG[0].shape) )
     #plt.imshow(BG[0], aspect = 'equal', cmap = 'gray')
     #plt.show()
     
     #----------------------------------------------------------------
 
     count = 0
-    for f in filenames:
+    for f in filenames[::-1]: # Analyse in reverse so that the crop images are of the steady state
         # Image preprocessing ========================
 
          # import image
@@ -119,11 +117,17 @@ if __name__ == '__main__':
         # split into vertical strips to analyse
         if count == 0:
             analysis_area = img.choose_crop()
+            strips = RAW_img.define_analysis_strips(img, analysis_area, 400, display=True)
+        else:
+            strips  = RAW_img.define_analysis_strips(img, analysis_area, 400)
+
         
         # get 1d density distribution
-
+        density_profiles = RAW_img.one_d_density(strips)
+        print(density_profiles.head())
+        print(density_profiles.shape)
         # get the interface position
-
+        exit()
 
     #    if count % 10 == 0:
         #    img.save_histogram()
@@ -134,7 +138,7 @@ if __name__ == '__main__':
         # housekeeping
         print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed')
         count += 1
-
+        
 
     #
     #

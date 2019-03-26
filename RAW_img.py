@@ -2,10 +2,14 @@ import os
 import rawpy # RAW file processor - wrapper for libraw / dcraw
 import inspect
 import numpy as np
+import math as m
+import pandas as pd
+import statistics as stats
 import exiftool
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as patches
+from matplotlib.lines import Line2D      
 import sys
 
 
@@ -146,19 +150,19 @@ class Raw_img():
 		plt.ion()
 		ax = plt.axes()
 		if self.ext == 'JPG':
-			if self.status['cropped'] == False:
+			if self.status['cropped'] == False: # cropping the original image
 				ax.imshow(self.raw_image)
-			else:
-				ax.imshow(self.red)
+			else:  # cropping again for analysis area
+				ax.imshow(self.image)
 		else:
-			if self.status['cropped'] == False:
+			if self.status['cropped'] == False:  # cropping the original image
 				ax.imshow(self.raw_red)
-			else:
-				ax.imshow(self.red)
+			else: # cropping again for analysis area
+				ax.imshow(self.image)
 
 		response = 'no'
 		while 'y' not in response.lower():
-
+			
 			# input position of the crop        
 			xy = []
 			xy.append(int(input('x-coordinate of the top left corner: ')))
@@ -171,7 +175,7 @@ class Raw_img():
 			ax.add_patch(rect)
 			plt.draw()
 			response = input('Are you happy with the crop area?  Do you want to continue? [Y/N]')
-
+		
 		# End interactive mode and close figure
 		plt.ioff()
 		plt.close()
@@ -211,7 +215,6 @@ class Raw_img():
 			if crop == False:
 				plt.imshow(getattr(self,'raw_' + channel), aspect = 'equal', cmap = colormap)
 			else:
-				
 				plt.imshow(getattr(self, channel), aspect = 'equal', cmap = colormap)
 			plt.axis('off')
 			plt.title(channel.capitalize()+ ' channel')
@@ -273,9 +276,9 @@ class Raw_img():
 		
 		# divide by the background image
 
-		self.crop_red = np.divide(self.crop_red , bg_img[0])
-		self.crop_green = np.divide(self.crop_green , bg_img[1])
-		self.crop_blue = np.divide(self.crop_blue , bg_img[2])
+		self.red = np.divide(self.red , bg_img[0])
+		self.green = np.divide(self.green , bg_img[1])
+		self.blue = np.divide(self.blue , bg_img[2])
 		
 		# housekeeping
 		self.status['normalised'] = True
@@ -292,14 +295,59 @@ class Raw_img():
 
 
 
-def define_analysis_strips(img, analysis_area, strip_width):
+def define_analysis_strips(img, analysis_area, strip_width, channel = 'red', display = False):
 	'''defines an area of processed image of channel ... to analyse.
-	will return a tuple of np.arrays for each strip
+	returns a dictionary of strip section and the np.array sitting in value
 	img = RAW_img class object
 	analysis_area = tuple from choose_crop() total area to analyse
 	strip_width = int in pixels'''
-	pass
-	no_of_strips
+	number_of_strips = m.floor(analysis_area[1] / strip_width) # find maximum number of stips based on spacing and width
+	x1 = analysis_area[0][0]
+	y1 = analysis_area[0][1]
+	# x,y bottom right corner
+	x2 = analysis_area[0][0] + number_of_strips*strip_width 
+	y2 = analysis_area[0][1] + analysis_area[2] # y-coordinate
+	strip_interfaces = [int(i) for i in np.linspace(analysis_area[0][0], x2, number_of_strips+1)]
+
+	if display == True:
+		plt.ion()
+		ax = plt.axes()
+		ax.imshow(getattr(img, channel))
+		rect1 = patches.Rectangle( (x1, y1), (x2-x1), (y2-y1), linewidth = 1, edgecolor='r', facecolor = 'none')
+		ax.add_patch(rect1)
+		strip_label = range(number_of_strips) # counter for the strips
+		j = 0
+		for i in strip_interfaces[:-1]:
+			l = Line2D( [i,i], [y1,y2] , linewidth = 1, color = 'r')
+			ax.add_line(l)
+			plt.text( i + round(strip_width/2) , stats.mean([y1,y2]) , str(strip_label[j]), color = 'r' )
+			plt.draw()
+			j += 1
+		plt.ioff()
+		if not os.path.exists(img.img_loc + 'analysis/'):
+			os.makedirs(img.img_loc + 'analysis/')
+		plt.savefig(img.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
+
+
+	return { str(strip_label[i]) : getattr(img,channel)[ analysis_area[0][1]:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
+	
+
+
+def one_d_density(strips, n = 10):
+	'''takes in a dictionary containing np.arrays (strips),
+	produces plot, or horizontally average values
+	smoothness = number of pixels to do a moving average '''
+	df = pd.DataFrame(columns = strips.keys())
+	for k, v in strips.items():
+		df[k] = pd.Series(np.mean(v, axis = 1))
+		#density_profile_raw[k] = np.mean(v, axis = 0)
+		#density_profile_smooth[k] = 
+	return df
+
+
+
+		
+	
 
 
 

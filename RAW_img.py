@@ -179,8 +179,8 @@ class Raw_img():
 		# End interactive mode and close figure
 		plt.ioff()
 		plt.close()
-		# return to crop information
-		return (xy, width, height)
+		# return to crop information as dictionary
+		return {'xy': xy, 'width' : width, 'height' : height}
 
 
 	def crop_img(self, crop_pos):
@@ -188,9 +188,9 @@ class Raw_img():
 		and you have the option of re aligning if you want """
 		
 		# Input the 
-		self.crop_xy = crop_pos[0]
-		self.crop_width = crop_pos[1]
-		self.crop_height = crop_pos[2]
+		self.crop_xy = crop_pos['xy'].values()
+		self.crop_width = crop_pos['width'].values()
+		self.crop_height = crop_pos['height'].values()
 
 		# Make the crops
 		self.image = self.raw_image[self.crop_xy[1]:(self.crop_xy[1] + self.crop_height) , self.crop_xy[0]: (self.crop_xy[0] + self.crop_width)]
@@ -295,19 +295,21 @@ class Raw_img():
 
 
 
-	def define_analysis_strips(self, analysis_area, strip_width, channel = 'red', display = False):
+	def define_analysis_strips(self, crop_pos, strip_width, channel = 'red', display = False):
 		'''defines an area of processed image of channel ... to analyse.
 		returns a dictionary of strip section and the np.array sitting in value
 		img = RAW_img class object
-		analysis_area = tuple from choose_crop() total area to analyse
+		crop_pos = dictionary from choose_crop() total area to analyse
 		strip_width = int in pixels'''
-		number_of_strips = m.floor(analysis_area[1] / strip_width) # find maximum number of stips based on spacing and width
-		x1 = analysis_area[0][0]
-		y1 = analysis_area[0][1]
+		width = crop_pos['width'].values()
+		height = crop_pos['height'].values()
+		number_of_strips = m.floor(width / strip_width) # find maximum number of stips based on spacing and width
+		x1 = crop_pos['xy'].values()[0]
+		y1 = crop_pos['xy'].values()[1]
 		# x,y bottom right corner
-		x2 = analysis_area[0][0] + number_of_strips*strip_width 
-		y2 = analysis_area[0][1] + analysis_area[2] # y-coordinate
-		strip_interfaces = [int(i) for i in np.linspace(analysis_area[0][0], x2, number_of_strips+1)]
+		x2 = x1 + number_of_strips*strip_width 
+		y2 = y1 + height # y-coordinate
+		strip_interfaces = [int(i) for i in np.linspace(x1, x2, number_of_strips+1)]
 		strip_label = range(number_of_strips) # counter for the strips
 		if display == True:
 			plt.ion()
@@ -327,8 +329,8 @@ class Raw_img():
 				os.makedirs(self.img_loc + 'analysis/')
 			plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
 			plt.close()
-
-		self.strips =  { str(strip_label[i]) : getattr(self,channel)[ analysis_area[0][1]:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
+		# change this to a list of data frames
+		self.strips =  { str(strip_label[i]) : getattr(self,channel)[ y1:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] for i in strip_label} 
 
 
 
@@ -352,7 +354,17 @@ class Raw_img():
 
 
 
-		
+def save_crop(crop_pos, purpose = 'initial'):
+	'''function will save crop_pos to .txt file so that we don't have to put it in all the time
+	crop_pos: tuple (xy top left corner, width, height)
+	purpose: str options:
+	 'initial' for cutting down the raw file to the box
+	 'analysis' for specifying the area to analyse '''
+	with open('sales.csv', 'w') as csv_file:  
+	    csv_writer = csv.writer(csv_file, delimiter=',')
+	    csv_writer.writerow(weekdays)
+	    csv_writer.writerow(sales)
+
 	
 
 

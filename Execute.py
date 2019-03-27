@@ -1,70 +1,10 @@
-import glob
+
 import os
 import RAW_img
-import numpy as np
-import pprint
-import matplotlib.pyplot as plt
-
-def get_image_fid(rel_imgs_dir, *img_ext):
-    """Function to get a list of file IDs to import.
-    rel_imgs_dir = string - relative file path to this script
-    *img_ext = string - extensions you want to list the IDs of"""
-    try:
-        os.chdir(os.path.dirname(__file__)) # Change working directory to the directory of this script
-        os.chdir(rel_imgs_dir)
-        fid = {}
-        for exts in img_ext:
-            exts = '*.' + exts.split('.')[-1] # try to ensure if the input is "".txt" or "txt" it doesn't matter
-            values = []
-            for file in glob.glob(exts):
-                # remove the file extension
-                values.append(file.split('.')[0])
-                values.sort()
-            fid[str(exts[1:])] = values
-        return fid
-    except NameError as e:
-        print(e)
-    except AttributeError as e:
-        print(e)
-    except TypeError as e:
-        print(e)
-
-
-def background_img_mean(bg_imgs):
-    '''returns a list of np.array of mean rgb channels from the input images'''
-    # if the background images need black level offsetting
-    if (bg_imgs[0].status['black_level'] == False) and (bg_imgs[0].ext == 'ARW') : 
-        bg_imgs = [img.black_offset() for img in bg_imgs]
-    
-    result = []
-    for color in ['red', 'green', 'blue']:
-        BG = np.zeros( (getattr(bg_imgs[0], color).shape) ) # empty array
-        for img in bg_imgs:
-            BG += getattr(img, color) # add image channel
-        BG /= len(bg_imgs) # divide by length
-        result.append(BG)
-    return result # need to return both the mean
-
-
-def crop_background_imgs(bg_imgs):
-    '''crops the background images
-    bg_imgs should be a list of RAW_img class objects'''
-    crop_pos = bg_imgs[0].choose_crop() 
-    for img in bg_imgs:
-        img.crop_img(crop_pos) #crop images
-    return crop_pos
-    
-    
-def prep_background_imgs(bg_imgs):
-    '''Calls the functions above to apply to the list of backgrounnd images'''
-    crop_pos = crop_background_imgs(bg_imgs)
-    bg_mean = background_img_mean(bg_imgs)
-    return (bg_mean, crop_pos)
-
-
-
+import pandas as pd
 
 #-------------------------------------------#
+
 
 if __name__ == '__main__':
 
@@ -74,28 +14,38 @@ if __name__ == '__main__':
 
 
     # Get list of file names
-    file_ids = get_image_fid(rel_imgs_dir, file_ext)
+    file_ids = RAW_img.get_image_fid(rel_imgs_dir, file_ext)
     filenames = file_ids[file_ext]
 
 
     # Get background images
-    BG_ids = get_image_fid(rel_imgs_dir + 'BG/', file_ext)
+    BG_ids = RAW_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
     BG_filenames = BG_ids[file_ext]
 
     #crop background imgs and get crop_pos  
-    (BG, crop_pos) = prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
-    #plt.imshow(BG[0], aspect = 'equal', cmap = 'gray')
-    #plt.show()
+    (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
+ 
     
     #----------------------------------------------------------------
-    
+
+    # OPTIONS [0 = NO. 1 = YES]
+    SAVE = 0
+    DENSITY_PROFILES = 1
+
     count = 0
-    for f in filenames[::-1]: # Analyse in reverse so that the crop images are of the steady state
+    for f in filenames: # Analyse in reverse so that the crop images are of the steady state
         # Image preprocessing ========================
 
          # import image
         img = RAW_img.Raw_img(rel_imgs_dir, f, file_ext)
 
+        if count == 0:
+            metadata = img.get_metadata()
+            img.get_time()
+            t0 = img.time # intial time
+        img.get_time(t0)
+
+        
         # realign
 
         # undistort
@@ -117,14 +67,31 @@ if __name__ == '__main__':
 
         # split into vertical strips to analyse
         if count == 0:
-            analysis_area = img.choose_crop()
-            img.define_analysis_strips(analysis_area, 400, display=True)
-        else:
-            img.define_analysis_strips(analysis_area, 400)
+            if not os.path.isfile(img.img_loc + 'analysis_crop_area.csv'): # if csv file doesn't exist
+                img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) # import the last image for the crop
+                analysis_area = img1.choose_crop() # global crop area
+                del(img1)
+                
+                RAW_img.save_crop(img, analysis_area, purpose = 'analysis') # save crop coordinates
+            else:
+                analysis_area = RAW_img.read_crop(img, purpose = 'analysis') # else read in crop coordinates
+
+            
+            # Transform global cordinates of analysis area to suit next method
+            analysis_area['x1'] -= crop_pos['x1']
+            analysis_area['y1'] -= crop_pos['y1']
+
+            door_level = RAW_img.door_level(img, analysis_area) # define the door level
+        
 
         
+        if count ==  len(filenames)-1:
+            img.define_analysis_strips(analysis_area, 400, display=True) # define the analysis strips and save an image
+        else:
+            img.define_analysis_strips(analysis_area, 400)
         # get 1d density distribution
-        img.one_d_density(10)
+        if DENSITY_PROFILES == 1:
+            img.one_d_density(door_level, n = 10 )
         # print(density_profiles.head())
         # print(density_profiles.shape)
 
@@ -132,47 +99,14 @@ if __name__ == '__main__':
         
 
     #    if count % 10 == 0:
-        #    img.save_histogram()
+        #    img.save_histogram(metadata)
 
         # save cropped red image
-        #img.disp_img(disp = False, crop= True, save = True, channel = 'red')
+        if SAVE == 1:
+            img.disp_img(disp = False, crop= True, save = True, channel = 'red')
 
         # housekeeping
         print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed')
         count += 1
-        
+  
 
-    #
-    #
-    #for keys, values in img1.metadata.items():
-    #    print(str(keys) + '  :   ' + str(values))
-    #
-    #
-    #print(img1.metadata['BlackLevel'].split())
-    #print(type(img1.metadata['BlackLevel'].split()[0]))
-    #img1.save_histogram()
-    #xy = [2000,200]
-    #width = 1500
-    #height = 1100
-    #img1.crop_img(xy, width, height, save_red=False)
-
-    #plt.imshow(img1.crop_red, aspect = 'equal')
-    #plt.show()
-    #plt.axis('off')
-
-
-
-    #img1.save_histogram(crop=True)
-    #img1.save_histogram(crop=False)
-
-    #try:
-    #	#img1.disp_histogram()
-    #	print(img1.size)
-    #except NameError as e:
-    #	print(str(e) + ' as an')
-    #except AttributeError as e:
-    #	print(e)
-    #print(dir(img1))
-
-    #print(type(img1.raw_image[0,0]))
-    #print(type(img2[0]))

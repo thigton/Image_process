@@ -2,6 +2,7 @@
 import os
 import RAW_img
 import pandas as pd
+import matplotlib.pyplot as plt
 
 #-------------------------------------------#
 
@@ -9,7 +10,7 @@ import pandas as pd
 if __name__ == '__main__':
 
     # Chose Parameters
-    rel_imgs_dir = './Data/190228_2/' # File path relative to the script
+    rel_imgs_dir = './Data/190328_3/' # File path relative to the script
     file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
 
 
@@ -22,6 +23,13 @@ if __name__ == '__main__':
     BG_ids = RAW_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
     BG_filenames = BG_ids[file_ext]
 
+    ## Check histogram of background image
+    #img_b = RAW_img.Raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], file_ext)
+    #metadata = img_b.get_metadata()
+    #img_b.save_histogram(metadata, crop = False)
+    
+
+
     #crop background imgs and get crop_pos  
     (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
  
@@ -29,8 +37,8 @@ if __name__ == '__main__':
     #----------------------------------------------------------------
 
     # OPTIONS [0 = NO. 1 = YES]
-    SAVE = 0
-    DENSITY_PROFILES = 1
+    SAVE = 1
+    DENSITY_PROFILES = 0
 
     count = 0
     for f in filenames: # Analyse in reverse so that the crop images are of the steady state
@@ -86,15 +94,15 @@ if __name__ == '__main__':
 
         
         if count ==  len(filenames)-1:
-            img.define_analysis_strips(analysis_area, 400, display=True) # define the analysis strips and save an image
+            img.define_analysis_strips(analysis_area, 1, display=True) # define the analysis strips and save an image
         else:
-            img.define_analysis_strips(analysis_area, 400)
+            img.define_analysis_strips(analysis_area, 1)
         # get 1d density distribution
         if DENSITY_PROFILES == 1:
             img.one_d_density(door_level, n = 10 )
         # print(density_profiles.head())
         # print(density_profiles.shape)
-
+        
         # get the interface position
         
 

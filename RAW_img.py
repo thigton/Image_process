@@ -286,7 +286,7 @@ class Raw_img():
 
 
 
-	def define_analysis_strips(self, crop_pos, strip_width, channel = 'red', display = False):
+	def define_analysis_strips(self, crop_pos, number_of_strips = 1, channel = 'red', display = False):
 		'''defines an area of processed image of channel ... to analyse.
 		returns a dictionary of strip section and the np.array sitting in value
 		img = RAW_img class object
@@ -294,7 +294,7 @@ class Raw_img():
 		strip_width = int in pixels'''
 		width = crop_pos['width']
 		height = crop_pos['height']
-		number_of_strips = m.floor(width / strip_width) # find maximum number of stips based on spacing and width
+		strip_width = m.floor(width / number_of_strips) # find maximum number of stips based on spacing and width
 		x1 = crop_pos['x1']
 		y1 = crop_pos['y1']
 		# x,y bottom right corner
@@ -323,7 +323,7 @@ class Raw_img():
 		# change this to a list of data frames
 		self.analysis_space = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2] )
 		self.strips = [pd.DataFrame( getattr(self,channel)[ y1:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] ) for i in self.strip_label]
-
+		self.number_of_strips = number_of_strips
 
 	def one_d_density(self, door, n = 10):
 		'''takes in a dictionary containing np.arrays (strips),
@@ -338,14 +338,23 @@ class Raw_img():
 			self.rho[str(l)] = pd.Series(np.mean(df, axis = 1))
 			# smoothed out noise with moving average
 			self.rho[str(l) + '_' + str(n)]= self.rho[str(l)].rolling( n, min_periods = 1, center = True ).mean()	
+
+			if self.number_of_strips == 1: # if we take the whole analysis area as one, calculate the standard deviation
+
+				self.rho[str(l) + '_std']  = pd.Series(np.std(df, axis = 1))
+				ax1.fill_betweenx(np.arange(len(self.rho[str(l)])), self.rho[str(l)] + 2*self.rho[str(l) + '_std'], 
+				self.rho[str(l)] - 2*self.rho[str(l) + '_std'], alpha = 0.3, facecolor = 'b', label = '95 %% confidence interval ')
+
 			ax1.plot(self.rho[str(l) + '_' + str(n)] ,np.arange(len(self.rho[str(l)])), label = str(l) )
-		ax1.set_xlim( [0.4, 1] )
+		ax1.set_xlim( [0, 1] )
 		ax1.set_title('Relative light intensity')
 		ax1.plot([0,1], [door,door], label = 'door_level')
 		ax1.set_ylabel('pixels')
 		ax1.set_xlabel('$I/I_0$')
 		ax1.legend()
-		ax2.imshow(self.analysis_space, aspect = 'auto')
+		image = ax2.imshow(self.analysis_space, aspect = 'auto', cmap = 'plasma')
+		image.set_clim(vmin = 0, vmax = 1)
+		fig.colorbar(image, ax = ax2 , orientation = 'vertical')
 		ax2.set_title('Processed Image')
 		fig.suptitle(self.filename + ' - ' + str(self.time) + 'sec' )
 
@@ -393,9 +402,11 @@ def background_img_mean(bg_imgs):
     for color in ['red', 'green', 'blue']:
         BG = np.zeros( (getattr(bg_imgs[0], color).shape) ) # empty array
         for img in bg_imgs:
-            BG += getattr(img, color) # add image channel
-        BG /= len(bg_imgs) # divide by length
+    	    BG += getattr(img, color) # add image channel
+        BG = np.ceil( BG / len(bg_imgs) ) # divide by length
+        BG[BG == 0] = 1 # Change all values of 0 to one so that they can be dividedby / normalised
         result.append(BG)
+
     return result # need to return both the mean
 
 def prep_background_imgs(bg_imgs):

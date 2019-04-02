@@ -55,8 +55,9 @@ class Raw_img():
 			self.raw_image = mpimg.imread(os.path.join(os.path.dirname(self.file_path), filename + ext))
 		# Split into rgb channels
 		self.rgb_channels(ext)
-		# Get sizes
+		# Get sizes 
 		self.get_size()
+
 		
 		
 
@@ -78,6 +79,23 @@ class Raw_img():
 			self.time = int(datetime.strptime(et.get_tag('ModifyDate',self.file_path), '%Y:%m:%d %H:%M:%S').timestamp() - t0 )
 			et.terminate()
 
+	def get_experiment_conditions(self):
+		'''Accesses csv files with experiment details and make them attributes
+		exp_no - str this should match a reference in the csv file to determine which row to read in.'''
+		 # grab folder name which ids the experiment
+		with open('Data/experiment_details.csv','r') as csvfile:
+			reader = csv.reader(csvfile, delimiter = ',')
+			for row in reader:
+				if row[9] == self.img_loc.split('/')[-2]:
+					self.bottom_opening_diameter = int(row[3])
+					self.side_opening_height = int(row[4])
+					self.sol_no = row[5]
+
+		with open('Data/solution.csv','r') as csvfile:
+		 	reader = csv.reader(csvfile, delimiter = ',')
+		 	for row in reader:
+				 if row[0] == self.sol_no:
+					 self.sol_denisty = float(row[5])
 		
 
 	def get_size(self):
@@ -325,42 +343,52 @@ class Raw_img():
 		self.strips = [pd.DataFrame( getattr(self,channel)[ y1:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] ) for i in self.strip_label]
 		self.number_of_strips = number_of_strips
 
-	def one_d_density(self, door, n = 10):
+	def one_d_density(self, box_dims, n = 10, save_fig = False):
 		'''takes in a dictionary containing np.arrays (strips),
 		produces plot, or horizontally average values
 		smoothness = number of pixels to do a moving average '''
-		plt.style.use('seaborn-white')
+		
 
 		self.rho = pd.DataFrame(columns = self.strip_label)
-		fig, (ax1,ax2) = plt.subplots(1, 2, sharey = True)
+		if save_fig == True:
+			plt.style.use('seaborn-white')
+			fig, (ax1,ax2) = plt.subplots(1, 2, sharey=True)
+			
+
 		for df, l in zip(self.strips, self.strip_label):
 			# horizontal mean of each strip
 			self.rho[str(l)] = pd.Series(np.mean(df, axis = 1))
 			# smoothed out noise with moving average
 			self.rho[str(l) + '_' + str(n)]= self.rho[str(l)].rolling( n, min_periods = 1, center = True ).mean()	
-
-			if self.number_of_strips == 1: # if we take the whole analysis area as one, calculate the standard deviation
-
-				self.rho[str(l) + '_std']  = pd.Series(np.std(df, axis = 1))
-				ax1.fill_betweenx(np.arange(len(self.rho[str(l)])), self.rho[str(l)] + 2*self.rho[str(l) + '_std'], 
+			
+			if save_fig == True:
+				yax = ( np.arange(len(self.rho[str(l)])) - box_dims['top'] )/ ( box_dims['bottom'] - box_dims['top']) # define the yaxis scale
+				ax1.plot(self.rho[str(l)] , yax, label = str(l) )
+				print(str(yax.shape) + ' and ' + str(self.rho[str(l)].shape) )
+		if self.number_of_strips == 1: # if we take the whole analysis area as one, calculate the standard deviation
+			self.rho[str(l) + '_std']  = pd.Series(np.std(df, axis = 1))
+			
+			if save_fig == True:
+				ax1.fill_betweenx(yax, self.rho[str(l)] + 2*self.rho[str(l) + '_std'], 
 				self.rho[str(l)] - 2*self.rho[str(l) + '_std'], alpha = 0.3, facecolor = 'b', label = '95 %% confidence interval ')
 
-			ax1.plot(self.rho[str(l) + '_' + str(n)] ,np.arange(len(self.rho[str(l)])), label = str(l) )
-		ax1.set_xlim( [0, 1] )
-		ax1.set_title('Relative light intensity')
-		ax1.plot([0,1], [door,door], label = 'door_level')
-		ax1.set_ylabel('pixels')
-		ax1.set_xlabel('$I/I_0$')
-		ax1.legend()
-		image = ax2.imshow(self.analysis_space, aspect = 'auto', cmap = 'plasma')
-		image.set_clim(vmin = 0, vmax = 1)
-		fig.colorbar(image, ax = ax2 , orientation = 'vertical')
-		ax2.set_title('Processed Image')
-		fig.suptitle(self.filename + ' - ' + str(self.time) + 'sec' )
+		if save_fig == True:	
+			ax1.set_xlim( [0, 1] )
+			ax1.set_title('Relative light intensity')
+			ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
+			ax1.set_ylabel('h/H')
+			ax1.set_xlabel('$I/I_0$')
+			ax1.legend()
+			processed_image = ax2.imshow(self.analysis_space, aspect = 'auto', cmap = 'plasma')
+			processed_image.set_clim(vmin = 0, vmax = 1)
+			fig.colorbar(processed_image, ax = ax2 , orientation = 'vertical')
+			ax2.set_title('Processed Image')
+			fig.suptitle(self.filename + ' - ' + str(self.time) + 'sec' )
 
 			# Save a figure
-		plt.savefig(self.img_loc + 'analysis/rho_profile_' + self.filename + '.png')
-		plt.close()
+			plt.savefig(self.img_loc + 'analysis/rho_profile_' + self.filename + '.png')
+			plt.close()
+
 
 
 
@@ -448,7 +476,7 @@ def read_crop(img, purpose = 'initial'):
 			d[k] = int(v)
 	return d
 
-def door_level(img, crop_pos): # cant just apply to the analysis space as you can't see the
+def box_dims(img, crop_pos): # cant just apply to the analysis space as you can't see the
 	'''returns pixel height of the door level
 	CAREFUL - pixel posiiton will be taken after the initial crop and then transformed into the analysis form'''
 	# Show an image in interactive mode
@@ -458,16 +486,24 @@ def door_level(img, crop_pos): # cant just apply to the analysis space as you ca
 	response = 'no'
 	while 'y' not in response.lower():
 		door = int(input('Input the level of the door by eye:'))
-		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r')
+		top = int(input('Input the level of the top of the front of the box:'))
+		bottom = int(input('Input the level of the bottom of the front of the box:'))
+		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l)
+		l2 = Line2D( [0, img.image.shape[1]], [top,top] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l2)
+		l3 = Line2D( [0, img.image.shape[1]], [bottom,bottom] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l3)
 		plt.draw()
 		response = input('Are you happy with the door level?  Do you want to continue? [Y/N]')
-	
+		l.set_visible(False)
+		l2.set_visible(False)
+		l3.set_visible(False)
 
 	plt.ioff()	
 	plt.close()
 
-	return door - crop_pos['y1']
+	return {'door' : door - crop_pos['y1'] , 'top' : top - crop_pos['y1'] , 'bottom' : bottom - crop_pos['y1']}
 
 
 	

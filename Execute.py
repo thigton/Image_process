@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
 
     # Chose Parameters
-    rel_imgs_dir = './Data/190328_3/' # File path relative to the script
+    rel_imgs_dir = './Data/190329/' # File path relative to the script
     file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
 
 
@@ -27,8 +27,7 @@ if __name__ == '__main__':
     #img_b = RAW_img.Raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], file_ext)
     #metadata = img_b.get_metadata()
     #img_b.save_histogram(metadata, crop = False)
-    
-
+    #exit()
 
     #crop background imgs and get crop_pos  
     (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
@@ -37,8 +36,8 @@ if __name__ == '__main__':
     #----------------------------------------------------------------
 
     # OPTIONS [0 = NO. 1 = YES]
-    SAVE = 1
-    DENSITY_PROFILES = 0
+    SAVE = 0
+    DENSITY_PROFILES = 1
 
     count = 0
     for f in filenames: # Analyse in reverse so that the crop images are of the steady state
@@ -46,6 +45,7 @@ if __name__ == '__main__':
 
          # import image
         img = RAW_img.Raw_img(rel_imgs_dir, f, file_ext)
+        img.get_experiment_conditions()
 
         if count == 0:
             metadata = img.get_metadata()
@@ -89,19 +89,18 @@ if __name__ == '__main__':
             analysis_area['x1'] -= crop_pos['x1']
             analysis_area['y1'] -= crop_pos['y1']
 
-            door_level = RAW_img.door_level(img, analysis_area) # define the door level
+            box_dims = RAW_img.box_dims(img, analysis_area) # define the door level
         
 
-        
+        print(f)
         if count ==  len(filenames)-1:
             img.define_analysis_strips(analysis_area, 1, display=True) # define the analysis strips and save an image
         else:
             img.define_analysis_strips(analysis_area, 1)
         # get 1d density distribution
         if DENSITY_PROFILES == 1:
-            img.one_d_density(door_level, n = 10 )
-        # print(density_profiles.head())
-        # print(density_profiles.shape)
+            img.one_d_density(box_dims, n = 10, save_fig = True )
+        exit()
         
         # get the interface position
         

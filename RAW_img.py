@@ -4,15 +4,16 @@ import rawpy # RAW file processor - wrapper for libraw / dcraw
 import numpy as np
 import math as m
 import pandas as pd
-import statistics as stats
 import exiftool
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as patches
-from matplotlib.lines import Line2D      
+from matplotlib.lines import Line2D 
+import matplotlib.gridspec as gridspec     
 import sys
 import csv
+
 
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
@@ -304,92 +305,64 @@ class Raw_img():
 
 
 
-	def define_analysis_strips(self, crop_pos, number_of_strips = 1, channel = 'red', display = False):
+	def define_analysis_strips(self, crop_pos, box_dims, door_strip_width = 100, channel = 'red', save = False):
 		'''defines an area of processed image of channel ... to analyse.
-		returns a dictionary of strip section and the np.array sitting in value
+		returns pd.dataframes of the door strip and the box strip
 		img = RAW_img class object
 		crop_pos = dictionary from choose_crop() total area to analyse
-		strip_width = int in pixels'''
+		door_strip_width = int , number of pixels to analyse seperately close to the door to see if there is a difference.
+		channel = str, rgb channel
+		save = bool, do you want to save an image of the sections'''
+
 		width = crop_pos['width']
 		height = crop_pos['height']
-		strip_width = m.floor(width / number_of_strips) # find maximum number of stips based on spacing and width
 		x1 = crop_pos['x1']
 		y1 = crop_pos['y1']
-		# x,y bottom right corner
-		x2 = x1 + number_of_strips*strip_width 
-		y2 = y1 + height # y-coordinate
-		strip_interfaces = [int(i) for i in np.linspace(x1, x2, number_of_strips+1)]
-		self.strip_label = np.arange(number_of_strips) # counter for the strips
-		if display == True:
+
+		# x2 is the x-coordinate of the interface between the dor strip and the rest
+		x2 = x1 + door_strip_width
+		# y-coordinate of the bottom of the 
+		y2 = y1 + height 
+
+		self.door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(box_dims['h/H'] , name = 'h/H'))
+		self.box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(box_dims['h/H'] , name = 'h/H'))
+
+		if save == True:
 			plt.ion()
 			ax = plt.axes()
-			ax.imshow(getattr(self, channel))
-			rect1 = patches.Rectangle( (x1, y1), (x2-x1), (y2-y1), linewidth = 1, edgecolor='r', facecolor = 'none')
+			ax.imshow(getattr(self, 'image'))
+			rect1 = patches.Rectangle( (x1, y1), width, height, linewidth = 1, edgecolor='r', facecolor = 'none')
 			ax.add_patch(rect1)
-			j = 0
-			for i in strip_interfaces[:-1]:
-				l = Line2D( [i,i], [y1,y2] , linewidth = 1, color = 'r')
-				ax.add_line(l)
-				plt.text( i + round(strip_width/2) , stats.mean([y1,y2]) , str(self.strip_label[j]), color = 'r' )
-				plt.draw()
-				j += 1
+			ax.add_line(Line2D([x2,x2],[y1,y2],linewidth = 1, color = 'r'))
+			plt.text( (x1+x2)/2 , (y1+y2)/2 , 'door strip', color = 'r', rotation = 90)
+			plt.text( (x2+x1+width)/2 , (y1+y2)/2 , 'box strip', color = 'r', rotation = 90)
+			plt.draw()
 			plt.ioff()
 			if not os.path.exists(self.img_loc + 'analysis/'):
 				os.makedirs(self.img_loc + 'analysis/')
 			plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
 			plt.close()
-		# change this to a list of data frames
-		self.analysis_space = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2] )
-		self.strips = [pd.DataFrame( getattr(self,channel)[ y1:y2 , strip_interfaces[i] : strip_interfaces[i+1] ] ) for i in self.strip_label]
-		self.number_of_strips = number_of_strips
 
-	def one_d_density(self, box_dims, n = 10, save_fig = False):
-		'''takes in a dictionary containing np.arrays (strips),
-		produces plot, or horizontally average values
-		smoothness = number of pixels to do a moving average '''
+		
 		
 
-		self.rho = pd.DataFrame(columns = self.strip_label)
-		if save_fig == True:
-			plt.style.use('seaborn-white')
-			fig, (ax1,ax2) = plt.subplots(1, 2, sharey=True)
-			
+	def one_d_density(self, box_dims, save_fig = False):
+		'''finds horizontal average and standard deviation of box_strip and door_strip) 
+		and appends dataframe to a csv file containing this information for all images in the experiment.'''
+		
+		# initialise dataframe with h/H data in place
+		columns = pd.MultiIndex.from_product([[self.time] , ['door', 'box'], ['mean','std'] ], names = ['time','data','attribute'])
+		idx = pd.Series(box_dims['h/H'] , name = 'h/H')
+		self.rho = pd.DataFrame(index = idx , columns = columns)
 
-		for df, l in zip(self.strips, self.strip_label):
+		
+		for df, l in zip([self.door_strip,self.box_strip], ['door','box']):
 			# horizontal mean of each strip
-			self.rho[str(l)] = pd.Series(np.mean(df, axis = 1))
-			# smoothed out noise with moving average
-			self.rho[str(l) + '_' + str(n)]= self.rho[str(l)].rolling( n, min_periods = 1, center = True ).mean()	
-			
-			if save_fig == True:
-				yax = ( np.arange(len(self.rho[str(l)])) - box_dims['top'] )/ ( box_dims['bottom'] - box_dims['top']) # define the yaxis scale
-				ax1.plot(self.rho[str(l)] , yax, label = str(l) )
-				print(str(yax.shape) + ' and ' + str(self.rho[str(l)].shape) )
-		if self.number_of_strips == 1: # if we take the whole analysis area as one, calculate the standard deviation
-			self.rho[str(l) + '_std']  = pd.Series(np.std(df, axis = 1))
-			
-			if save_fig == True:
-				ax1.fill_betweenx(yax, self.rho[str(l)] + 2*self.rho[str(l) + '_std'], 
-				self.rho[str(l)] - 2*self.rho[str(l) + '_std'], alpha = 0.3, facecolor = 'b', label = '95 %% confidence interval ')
-
-		if save_fig == True:	
-			ax1.set_xlim( [0, 1] )
-			ax1.set_title('Relative light intensity')
-			ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
-			ax1.set_ylabel('h/H')
-			ax1.set_xlabel('$I/I_0$')
-			ax1.legend()
-			processed_image = ax2.imshow(self.analysis_space, aspect = 'auto', cmap = 'plasma')
-			processed_image.set_clim(vmin = 0, vmax = 1)
-			fig.colorbar(processed_image, ax = ax2 , orientation = 'vertical')
-			ax2.set_title('Processed Image')
-			fig.suptitle(self.filename + ' - ' + str(self.time) + 'sec' )
-
-			# Save a figure
-			plt.savefig(self.img_loc + 'analysis/rho_profile_' + self.filename + '.png')
-			plt.close()
-
-
+			self.rho[self.time, l, 'mean'].fillna( value = np.mean(df, axis = 1) , inplace = True)
+			# horizontal standard deviation of each strip
+			self.rho[self.time, l, 'std'].fillna( value = np.std(df, axis = 1) , inplace = True)
+					
+				
 
 
 # -------------------------------------------------------
@@ -441,44 +414,61 @@ def prep_background_imgs(bg_imgs):
     '''Calls the functions above to apply to the list of backgrounnd images''' 
     if not os.path.isfile(bg_imgs[0].img_loc + 'initial_crop_area.csv'): # if csv file doesn't exist
         crop_pos = bg_imgs[0].choose_crop()
-        save_crop(bg_imgs[0], crop_pos, purpose = 'initial')
+        save_dict(bg_imgs[0].img_loc, crop_pos, csv_name = 'initial_crop_area')
     else:
-            crop_pos = read_crop(bg_imgs[0], purpose = 'initial')
-
+        crop_pos = read_dict(bg_imgs[0].img_loc, csv_name = 'initial_crop_area')
+	
     for img in bg_imgs:
         img.crop_img(crop_pos) #crop images
 
     bg_mean = background_img_mean(bg_imgs) # find mean of crop.
-
+	
 
     return (bg_mean, crop_pos)
 
 
 
-def save_crop(img, crop_pos, purpose = 'initial'):
+def save_dict(img_loc, mydict , csv_name ):
 	'''function will save crop_pos to .csv file so that we don't have to put it in all the time
 	crop_pos: tuple (xy top left corner, width, height)
 	purpose: str options:
 	 'initial' for cutting down the raw file to the box
 	 'analysis' for specifying the area to analyse '''
-	with open(img.img_loc + purpose + '_crop_area.csv', 'w') as csv_file:
-		for key in crop_pos.keys():
-			csv_file.write('%s, %s\n'%(key,crop_pos[key]))
+	with open(img_loc + csv_name + '.csv', 'w') as csv_file:
+		for key in mydict.keys():
+			if isinstance( mydict[key], np.ndarray ):
+				for x in mydict[key]:
+					csv_file.write('%s, %f\n'%(key,x))
+			else:
+				csv_file.write('%s, %s\n'%(key,mydict[key]))
 
 
-def read_crop(img, purpose = 'initial'):
+def read_dict(dict_loc, csv_name):
 	'''Read in crop data from csv to dictionary'''
-	with open(img.img_loc + purpose + '_crop_area.csv','r') as csvfile:
+	with open(dict_loc + csv_name + '.csv','r') as csvfile:
 		readCSV = csv.reader(csvfile, delimiter=',')
 		d = {}
-		for row in readCSV:
-			k, v = row
-			d[k] = int(v)
+
+		if csv_name == 'box_dims':
+			h = []
+			for row in readCSV:
+				k, v = row
+				if  k == 'h/H':
+					h.append(float(v))
+				else:
+					d[k] = float(v)
+			d['h/H'] = h
+		else:
+			for row in readCSV:
+				k, v = row
+				d[k] = int(v)
+
 	return d
 
 def box_dims(img, crop_pos): # cant just apply to the analysis space as you can't see the
-	'''returns pixel height of the door level
-	CAREFUL - pixel posiiton will be taken after the initial crop and then transformed into the analysis form'''
+	'''CAREFUL - pixel posiiton will be taken after the initial crop and then transformed into the analysis form
+	returns a dictionary of the door height relative to the top of the analysis area, and
+	a scale of h/H of the analysis area '''
 	# Show an image in interactive mode
 	plt.ion()
 	ax = plt.axes()
@@ -486,12 +476,12 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 	response = 'no'
 	while 'y' not in response.lower():
 		door = int(input('Input the level of the door by eye:'))
-		top = int(input('Input the level of the top of the front of the box:'))
-		bottom = int(input('Input the level of the bottom of the front of the box:'))
 		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l)
+		top = int(input('Input the level of the top of the front of the box:'))
 		l2 = Line2D( [0, img.image.shape[1]], [top,top] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l2)
+		bottom = int(input('Input the level of the bottom of the front of the box:'))
 		l3 = Line2D( [0, img.image.shape[1]], [bottom,bottom] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l3)
 		plt.draw()
@@ -502,8 +492,62 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 
 	plt.ioff()	
 	plt.close()
-
-	return {'door' : door - crop_pos['y1'] , 'top' : top - crop_pos['y1'] , 'bottom' : bottom - crop_pos['y1']}
-
-
 	
+	scale = np.linspace(0,1,bottom - top) # create scale of box between 0 and 1
+	y1_idx = crop_pos['y1'] - top # this should return the index of the top of the analysis area on scale.
+	y2_idx = crop_pos['y1']+ crop_pos['height'] - top # same for the bottom
+	return {'door' : scale[door-top], 'h/H': scale[y1_idx:y2_idx]}
+
+
+
+
+
+#########################################################
+# Plotting functions
+#########################################################
+
+def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, number_of_plots = 10):
+	'''function will save a figure containing 'x' equally spaced (in time)
+	plots of the 1D density profile which appears in the dataframe df,
+	'''
+	
+	plt.style.use('seaborn-white')
+	fig, (ax1,ax2) = plt.subplots(1, 2, sharey=True, figsize = (12, 9))
+	
+	# define the y axis
+	yax = df.index.tolist()
+	# get regular spacing of images so that you get 10 images
+	idx = m.floor(len(time) / number_of_plots)
+	#overwrite with the subset
+	time1 = time[::idx]
+	for t in time1:
+		# plot box strip
+
+		ax1.plot(df[ str(t), 'box', 'mean'] , yax, label = str(t) + ' sec' )
+		ax1.fill_betweenx(yax, df[ str(t), 'box', 'mean']  + 2*df[ str(t), 'box', 'std'], 
+		df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'box', 'std'], alpha = 0.3)
+		ax1.set_xlim( [0, 1] )
+		ax1.set_title('Box strip')
+		
+		ax1.set_ylabel('h/H')
+		ax1.set_xlabel('$I/I_0$')	
+		ax1.legend()
+
+		# plot door strip
+		ax2.plot(df[ str(t), 'door', 'mean'] , label = str(t) + ' sec' )
+		ax2.fill_betweenx(yax, df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'door', 'std']  , 
+		df[ str(t), 'box', 'mean'] + 2*df[ str(t), 'door', 'std'], alpha = 0.3)
+		ax2.set_xlim( [0, 1] )
+		ax2.set_title('Door strip')
+		
+		ax2.set_ylabel('h/H')
+		ax2.set_xlabel('$I/I_0$')	
+		ax2.legend()
+
+
+	ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
+	ax2.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
+	ax1.set_ylim([0, 1])
+	fig.suptitle('vertical density profiles' )
+	plt.savefig(save_loc + 'rho_profile_transient.png')
+	plt.close()

@@ -32,7 +32,6 @@ if __name__ == '__main__':
     #crop background imgs and get crop_pos  
     (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
  
-    
     #----------------------------------------------------------------
 
     # OPTIONS [0 = NO. 1 = YES]
@@ -73,35 +72,52 @@ if __name__ == '__main__':
 
         # Image analysis ============================
 
-        # split into vertical strips to analyse
+        # split into a door strip and a box strip
         if count == 0:
-            if not os.path.isfile(img.img_loc + 'analysis_crop_area.csv'): # if csv file doesn't exist
-                img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) # import the last image for the crop
-                analysis_area = img1.choose_crop() # global crop area
+            # if csv file doesn't exist
+            if not os.path.isfile(img.img_loc + 'analysis_crop_area.csv'): 
+                # import the last image for the crop
+                img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
+                 # global crop area
+                analysis_area = img1.choose_crop()
+                # Transform global cordinates of analysis area to coordinates on cropped image
+                analysis_area['x1'] -= crop_pos['x1']
+                analysis_area['y1'] -= crop_pos['y1']
                 del(img1)
-                
-                RAW_img.save_crop(img, analysis_area, purpose = 'analysis') # save crop coordinates
+                 # save crop coordinates
+                RAW_img.save_dict(rel_imgs_dir, analysis_area, csv_name = 'analysis_crop_area')
             else:
-                analysis_area = RAW_img.read_crop(img, purpose = 'analysis') # else read in crop coordinates
+                # else read in crop coordinates
+                analysis_area = RAW_img.read_dict(rel_imgs_dir, csv_name = 'analysis_crop_area') 
 
-            
-            # Transform global cordinates of analysis area to suit next method
-            analysis_area['x1'] -= crop_pos['x1']
-            analysis_area['y1'] -= crop_pos['y1']
+            # define the door level , box top and bottom returns a dict
+            if not os.path.isfile(img.img_loc + 'box_dims.csv'): 
+                box_dims = RAW_img.box_dims(img, analysis_area) 
 
-            box_dims = RAW_img.box_dims(img, analysis_area) # define the door level
-        
+                RAW_img.save_dict(rel_imgs_dir, box_dims, csv_name = 'box_dims')
+            else:
+                box_dims = RAW_img.read_dict(rel_imgs_dir, csv_name = 'box_dims')
 
-        print(f)
+        # Define crop 
         if count ==  len(filenames)-1:
-            img.define_analysis_strips(analysis_area, 1, display=True) # define the analysis strips and save an image
+            # Save analysis area for last image
+            img.define_analysis_strips(analysis_area, box_dims, door_strip_width = 200, save = True)
         else:
-            img.define_analysis_strips(analysis_area, 1)
+            img.define_analysis_strips(analysis_area, box_dims,  door_strip_width = 200)
         # get 1d density distribution
+
         if DENSITY_PROFILES == 1:
-            img.one_d_density(box_dims, n = 10, save_fig = True )
-        exit()
-        
+            # get one d density profiles
+            img.one_d_density(box_dims)
+ 
+            if count == 0: 
+                # make dataframes on first image
+                df_rho = pd.DataFrame(img.rho)
+            else:
+                # Add to dataframe
+                df_rho = pd.concat([df_rho,img.rho], axis = 1)
+
+
         # get the interface position
         
 
@@ -116,4 +132,11 @@ if __name__ == '__main__':
         print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed')
         count += 1
   
+    # Write dataframes to csv
+    if not os.path.isfile(rel_imgs_dir+ 'analysis/rho.csv'):
+        os.remove(rel_imgs_dir+ 'analysis/rho.csv')
+    df_rho.to_csv(rel_imgs_dir + 'analysis/rho.csv', sep = ',', index = True)
+    
+
+ 
 

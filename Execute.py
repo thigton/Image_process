@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
 
     # Chose Parameters
-    rel_imgs_dir = './Data/190329/' # File path relative to the script
+    rel_imgs_dir = './Data/190328_3/' # File path relative to the script
     file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
 
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
         if DENSITY_PROFILES == 1:
             # get one d density profiles
             img.one_d_density(box_dims)
- 
+            RAW_img.plot_density(img, box_dims)
             if count == 0: 
                 # make dataframes on first image
                 df_rho = pd.DataFrame(img.rho)
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         count += 1
   
     # Write dataframes to csv
-    if not os.path.isfile(rel_imgs_dir+ 'analysis/rho.csv'):
+    if os.path.isfile(rel_imgs_dir+ 'analysis/rho.csv'):
         os.remove(rel_imgs_dir+ 'analysis/rho.csv')
     df_rho.to_csv(rel_imgs_dir + 'analysis/rho.csv', sep = ',', index = True)
     

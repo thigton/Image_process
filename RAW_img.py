@@ -326,7 +326,6 @@ class Raw_img():
 
 		self.door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(box_dims['h/H'] , name = 'h/H'))
 		self.box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(box_dims['h/H'] , name = 'h/H'))
-
 		if save == True:
 			plt.ion()
 			ax = plt.axes()
@@ -493,7 +492,7 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 	plt.ioff()	
 	plt.close()
 	
-	scale = np.linspace(0,1,bottom - top) # create scale of box between 0 and 1
+	scale = np.linspace(1,0,bottom - top) # create scale of box between 0 and 1
 	y1_idx = crop_pos['y1'] - top # this should return the index of the top of the analysis area on scale.
 	y2_idx = crop_pos['y1']+ crop_pos['height'] - top # same for the bottom
 	return {'door' : scale[door-top], 'h/H': scale[y1_idx:y2_idx]}
@@ -516,16 +515,19 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 	
 	# define the y axis
 	yax = df.index.tolist()
-	# get regular spacing of images so that you get 10 images
-	idx = m.floor(len(time) / number_of_plots)
+	# find index closest to the steadystate time
+	idx_ss = min(range(len(time)), key=lambda i: abs(time[i]- steadystate))
+	# get regular spacing of images in the transient phase
+	space = m.floor(len(time[:idx_ss]) / number_of_plots)
 	#overwrite with the subset
-	time1 = time[::idx]
+	time1 = time[:idx_ss:space]
+
 	for t in time1:
 		# plot box strip
 
 		ax1.plot(df[ str(t), 'box', 'mean'] , yax, label = str(t) + ' sec' )
 		ax1.fill_betweenx(yax, df[ str(t), 'box', 'mean']  + 2*df[ str(t), 'box', 'std'], 
-		df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'box', 'std'], alpha = 0.3)
+		df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'box', 'std'], alpha = 0.2)
 		ax1.set_xlim( [0, 1] )
 		ax1.set_title('Box strip')
 		
@@ -534,9 +536,9 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 		ax1.legend()
 
 		# plot door strip
-		ax2.plot(df[ str(t), 'door', 'mean'] , label = str(t) + ' sec' )
-		ax2.fill_betweenx(yax, df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'door', 'std']  , 
-		df[ str(t), 'box', 'mean'] + 2*df[ str(t), 'door', 'std'], alpha = 0.3)
+		ax2.plot(df[ str(t), 'door', 'mean'] , yax, label = str(t) + ' sec' )
+		ax2.fill_betweenx(yax, df[ str(t), 'door', 'mean'] - 2*df[ str(t), 'door', 'std']  , 
+		df[ str(t), 'door', 'mean'] + 2*df[ str(t), 'door', 'std'], alpha = 0.2)
 		ax2.set_xlim( [0, 1] )
 		ax2.set_title('Door strip')
 		
@@ -550,4 +552,42 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 	ax1.set_ylim([0, 1])
 	fig.suptitle('vertical density profiles' )
 	plt.savefig(save_loc + 'rho_profile_transient.png')
+	plt.close()
+
+
+def plot_density(img, box_dims):
+	'''saves plot of the density profiles'''
+
+	if not os.path.exists(img.img_loc + '/analysis/single_density_profiles'):
+		os.mkdir(img.img_loc + '/analysis/single_density_profiles')
+	
+	plt.style.use('seaborn-white')
+	fig, (ax1,ax2) = plt.subplots(1, 2, figsize = (12, 9))
+	for l in ['box', 'door']:
+		ax1.plot(img.rho[img.time, l, 'mean'], box_dims['h/H'], label = l + ' strip' )
+		ax1.fill_betweenx(box_dims['h/H'], img.rho[img.time, l, 'mean']  + 2*img.rho[ img.time, l, 'std'], 
+		img.rho[ img.time, l, 'mean'] - 2*img.rho[ img.time, l, 'std'], alpha = 0.2)
+
+	ax1.set_xlim( [0, 1] )
+	ax1.set_ylim( [0, max(box_dims['h/H'])] )
+	ax1.set_title('Uncalibrated density profiles')
+	ax1.set_ylabel('h/H')
+	ax1.set_xlabel('$I/I_0$')	
+	ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level', color = 'r')
+	ax1.legend()
+	
+	# find the closest index to the door in pxels so thta it can be plotted on the image
+	door_idx =  min(range(len(box_dims['h/H'])), key=lambda i: abs(box_dims['h/H'][i]- box_dims['door']))
+	ax2.plot([0, len(img.door_strip.columns)+ len(img.box_strip.columns)], [door_idx, door_idx], label = 'door_level', color = 'r')
+	plt.text( len(img.door_strip.columns)/2 , len(img.door_strip.index)/2 , 'door strip', color = 'k', rotation = 90)
+	plt.text( len(img.door_strip.columns)+len(img.box_strip.columns)/2 , len(img.box_strip.index)/2 , 'box strip', color = 'k', rotation = 90)
+	ax2.plot( [len(img.door_strip.columns), len(img.door_strip.columns)] , [0, len(img.box_strip.index)] , color = 'k' )
+	image = ax2.imshow( pd.concat( [img.door_strip, img.box_strip], axis = 1 ), aspect = 'auto', cmap = 'plasma')
+	image.set_clim(vmin = 0, vmax = 1)
+	ax2.legend()
+	fig.colorbar(image, ax = ax2 , orientation = 'vertical')
+	ax2.set_title('Processed Image')
+	ax2.axis('off')
+	fig.suptitle( f'Side opening height: {str(img.side_opening_height)}mm \n Bottom opening diameter: {str(img.bottom_opening_diameter)}mm \n {img.filename} - {str(img.time)}sec' )
+	plt.savefig(img.img_loc + '/analysis/single_density_profiles/rho_profile_' + str(img.time) + 'secs.png')
 	plt.close()

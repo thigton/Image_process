@@ -13,8 +13,9 @@ def steadystate(df, time, data_loc):
     # rolling mean across time steps
     n = 5
     box_roll = box_mean.rolling(n, axis = 1).mean()
-    # find the difference between time steps
-    box_roll_diff = box_roll.diff(axis = 1)
+    # find the difference between rolling mean and the horizontal average of that time step.
+    box_roll_diff = box_mean - box_roll
+
 
 
     # threshold for steady state
@@ -27,7 +28,7 @@ def steadystate(df, time, data_loc):
         ax1.plot(box_roll[str(t)], box_roll.index.values, label = str(t))
     ax1.legend()
     ax2.legend()
-    ax2.set_title('difference between rolling averages')
+    ax2.set_title('diffrence between rolling time average and instance')
     ax1.set_title(f'rolling average from previous {n} time steps')
     fig.suptitle('box strip - steady state?' )
     plt.savefig(rel_data_dir + '/rho_profile_finding_steady_state.png')
@@ -52,7 +53,7 @@ def plot_timeaverage(df, exp):
 
 
 if __name__ == '__main__':
-    data_loc = ['190329','190328_3', '190328']
+    data_loc = ['190405','190405_2', '190405_3']
 
     for exp in data_loc:
         rel_data_dir = 'Data/' + exp + '/analysis/'
@@ -70,6 +71,5 @@ if __name__ == '__main__':
             time = sorted( { int(x) for x in df.columns.get_level_values(0) } )
             time_ss = steadystate(df, time, exp)
             box_dims = RAW_img.read_dict( rel_data_dir[:-9], csv_name = 'box_dims')
-            RAW_img.plot_density_transient(df, box_dims, time, steadystate = 500, save_loc = rel_data_dir)
+            RAW_img.plot_density_transient(df, box_dims, time, steadystate = 900, save_loc = rel_data_dir)
             
-            exit()

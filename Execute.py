@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
 
     # Chose Parameters
-    rel_imgs_dir = './Data/190328_3/' # File path relative to the script
+    rel_imgs_dir = './Data/190405_3/' # File path relative to the script
     file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
 
 

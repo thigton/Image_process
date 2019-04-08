@@ -21,8 +21,6 @@ import csv
 class Raw_img():
 
 
-
-
 	def __init__(self,img_loc,filename,ext = '.ARW'):
 		""" Import the raw file using rawpy
 		img_loc = str - relative to this file...I think
@@ -84,10 +82,12 @@ class Raw_img():
 		'''Accesses csv files with experiment details and make them attributes
 		exp_no - str this should match a reference in the csv file to determine which row to read in.'''
 		 # grab folder name which ids the experiment
+
 		with open('Data/experiment_details.csv','r') as csvfile:
+
 			reader = csv.reader(csvfile, delimiter = ',')
 			for row in reader:
-				if row[9] == self.img_loc.split('/')[-2]:
+				if row[10] == self.img_loc.split('/')[-2]:
 					self.bottom_opening_diameter = int(row[3])
 					self.side_opening_height = int(row[4])
 					self.sol_no = row[5]
@@ -477,10 +477,10 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 		door = int(input('Input the level of the door by eye:'))
 		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l)
-		top = int(input('Input the level of the top of the front of the box:'))
+		top = int(input('Input the level of the top of the back of the box:'))
 		l2 = Line2D( [0, img.image.shape[1]], [top,top] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l2)
-		bottom = int(input('Input the level of the bottom of the front of the box:'))
+		bottom = int(input('Input the level of the bottom of the back of the box:'))
 		l3 = Line2D( [0, img.image.shape[1]], [bottom,bottom] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l3)
 		plt.draw()

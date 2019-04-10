@@ -79,6 +79,7 @@ if __name__ == '__main__':
                 # import the last image for the crop
                 img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
                  # global crop area
+                print('Choose analysis area... \n Ensure the top and bottom are within the depth of the box')
                 analysis_area = img1.choose_crop()
                 # Transform global cordinates of analysis area to coordinates on cropped image
                 analysis_area['x1'] -= crop_pos['x1']

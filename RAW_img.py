@@ -166,7 +166,7 @@ class Raw_img():
 				ax.imshow(self.raw_image)
 			else:  # cropping again for analysis area
 				ax.imshow(self.image)
-		else:
+		else: #if raw file
 			if self.status['cropped'] == False:  # cropping the original image
 				ax.imshow(self.raw_red)
 			else: # cropping again for analysis area
@@ -180,13 +180,12 @@ class Raw_img():
 			y1 = int(input('y-coordinate of the top left corner: '))
 			width = int(input('x-coordinate of the bottom right corner: ')) - x1
 			height = int(input('y-coordinate of the bottom right corner: ')) - y1
-
 			# display crop on image
 			rect = patches.Rectangle( (x1, y1), width, height, linewidth = 1, edgecolor='r', facecolor = 'none')
 			ax.add_patch(rect)
 			plt.draw()
 			response = input('Are you happy with the crop area?  Do you want to continue? [Y/N]')
-		
+			rect.set_visible = False
 		# End interactive mode and close figure
 		plt.ioff()
 		plt.close()
@@ -412,6 +411,7 @@ def background_img_mean(bg_imgs):
 def prep_background_imgs(bg_imgs):
     '''Calls the functions above to apply to the list of backgrounnd images''' 
     if not os.path.isfile(bg_imgs[0].img_loc + 'initial_crop_area.csv'): # if csv file doesn't exist
+        print('Choose crop for base image')
         crop_pos = bg_imgs[0].choose_crop()
         save_dict(bg_imgs[0].img_loc, crop_pos, csv_name = 'initial_crop_area')
     else:
@@ -478,9 +478,12 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l)
 		top = int(input('Input the level of the top of the back of the box:'))
+		bottom = int(input('Input the level of the bottom of the back of the box:'))
+		if (top > crop_pos['y1']) or (bottom < crop_pos['y1']+crop_pos['height']):
+			print('analysis area should be within the depth of the box, \n kill the script and go back and redefine your analysis area.')
+			exit()
 		l2 = Line2D( [0, img.image.shape[1]], [top,top] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l2)
-		bottom = int(input('Input the level of the bottom of the back of the box:'))
 		l3 = Line2D( [0, img.image.shape[1]], [bottom,bottom] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l3)
 		plt.draw()
@@ -558,8 +561,8 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 def plot_density(img, box_dims):
 	'''saves plot of the density profiles'''
 
-	if not os.path.exists(img.img_loc + '/analysis/single_density_profiles'):
-		os.mkdir(img.img_loc + '/analysis/single_density_profiles')
+	if not os.path.exists(img.img_loc + 'analysis/single_density_profiles'):
+		os.mkdir(img.img_loc + 'analysis/single_density_profiles')
 	
 	plt.style.use('seaborn-white')
 	fig, (ax1,ax2) = plt.subplots(1, 2, figsize = (12, 9))

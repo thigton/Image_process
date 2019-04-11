@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import csv
 
 
+
 def steadystate(df, time, data_loc):
     '''returns the time when the steady state is believed to have been reached
     This is determined by looking at the change in the density profiles between time steps'''
@@ -52,8 +53,8 @@ def import_theory():
     '''function inports the theory values for the interface height and tidies up the column headers and index
     to match rest of code'''
     theory_df = pd.read_csv('Data/theory_h.csv', sep = ',', header = [0], index_col = [0] )
-    new_col_names = [ str(int(float(i.split('d')[-1].replace('_','.'))*10)) for i in theory_df.columns.values.tolist() ]
-    new_row_names = [ str(int(float(i.split('z')[-1].replace('_','.'))*1000)) for i in theory_df.index.values.tolist() ]
+    new_row_names = [ int(float(i.split('d')[-1].replace('_','.'))*10) for i in theory_df.index.values.tolist() ]
+    new_col_names = [ int(float(i.split('z')[-1].replace('_','.'))*1000) for i in theory_df.columns.values.tolist() ]
     cols = {}
     rows = {}
     for old_name, new_name in zip(theory_df.columns.values.tolist(), new_col_names):
@@ -62,7 +63,8 @@ def import_theory():
         rows[old_name] = new_name
 
     theory_df.rename(index = rows, columns = cols, inplace = True)
-    return theory_df
+
+    return theory_df.apply(lambda x : 1 - x) # flip the scale round to match that the experiment is upside down
 
 def experiment_conditions_as_dict(data_loc):
     '''returns the experiment conditions as a dictionary
@@ -72,8 +74,8 @@ def experiment_conditions_as_dict(data_loc):
         d = {}
         for row in reader:
             if row[10] == data_loc:
-                d['bottom_opening_diameter'] = int(row[3])
-                d['side_opening_height'] = int(row[4])
+                d['bod'] = int(row[3])
+                d['soh'] = int(row[4])
                 d['sol_no'] = row[5]
         
         return d
@@ -92,20 +94,27 @@ def timeaverage(df , time, time_ss, data_loc):
     return pd.concat([box_mean_timeave, box_std_timeave] , axis =1) 
 
 
-def plot_timeaverage(df_dict, exp_conditions, box_dims):
+def plot_timeaverage(df_dict, exp_conditions, box_dims, theory_df):
     '''takes in a dictionary of dataframes of the timeaverage values and saves a plot
     WARNING MAKE SURE THAT THE SAME SOLUTION HAS BEEN USED ON THE EXPERIMENTS YOU WANT TO COMPARE'''
-
+    
+    colors = ['blue', 'red','green','orange','purple','yellow'] # list of colors to use on the graphs
     fig = plt.figure(figsize=(12,9))
     ax1 = fig.add_axes([0.1,0.1,0.8,0.8])
-    for k,v in df_dict.items():
-        ax1.plot(v['mean'], v['mean'].index.values, label = 'Bot: ' + str(exp_conditions[k]['bottom_opening_diameter']) 
-        + 'mm / Side: ' + str(exp_conditions[k]['side_opening_height']) + 'mm' )
+    for (k,v) , c in zip(df_dict.items(), colors[:len(df_dict.keys())]):
+        # print(theory_df)
+        # print(exp_conditions[k]['bod'])
+        # print(exp_conditions[k]['soh'])
+        # exit()
+        ax1.plot(v['mean'], v['mean'].index.values, label = 'Bot: ' + str(exp_conditions[k]['bod']) 
+        + 'mm / Side: ' + str(exp_conditions[k]['soh']) + 'mm' , color = c)
+        theory_interface = theory_df.loc[exp_conditions[k]['bod'], exp_conditions[k]['soh']]
+        ax1.plot([0,1], [theory_interface, theory_interface], color = c , ls = '--')
         ax1.fill_betweenx(v['std'].index.values, v['mean'] - 2*v['std']  , v['mean'] + 2*v['std'], alpha = 0.2)
-    ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
+    ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level', color = 'black')
     ax1.set_ylabel('h/H')
     ax1.set_xlabel('$I/I_0$')
-    ax1.set_title('Time Averaged Steady State - Experiment comparison')
+    ax1.set_title('Time Averaged Steady State - Experiment comparison \n Theory(--) \n Uncalibrated entrainment, discharge coefficient and virtual origin')
     ax1.set_xlim([0,1])
     ax1.set_ylim([0,1])
     plt.legend()
@@ -121,7 +130,7 @@ if __name__ == '__main__':
 
     # import the thoery data from the .csv created by in matlab
     theory_df = import_theory()
-    
+
     for exp in data_loc:
         
         rel_data_dir = 'Data/' + exp + '/analysis/'
@@ -153,4 +162,4 @@ if __name__ == '__main__':
             # Create transient plot
             RAW_img.plot_density_transient(df, box_dims, time, steadystate = time_ss, save_loc = rel_data_dir)
           
-    plot_timeaverage(time_average, exp_conditions, box_dims)
+    plot_timeaverage(time_average, exp_conditions, box_dims, theory_df)

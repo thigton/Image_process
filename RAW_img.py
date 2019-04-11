@@ -211,7 +211,7 @@ class Raw_img():
 		# housekeeping
 		self.status['cropped'] = True
 
-	def disp_img(self, disp = True, crop = False, save = False, channel = 'red', colormap = 'gray'):
+	def disp_img(self, disp = True, crop = False, save = False, channel = 'red', colormap = 'inferno'):
 		"""Function displays the image on the screen
 		OPTIONS - 	disp - True - whether to actually display the image or not
 					crop = True - cropped as by crop_img False - Full image
@@ -224,7 +224,7 @@ class Raw_img():
 			if crop == False:
 				plt.imshow(getattr(self,'raw_' + channel), aspect = 'equal', cmap = colormap)
 			else:
-				plt.imshow(getattr(self, channel), aspect = 'equal', cmap = colormap)
+				plt.imshow(getattr(self, channel), aspect = 'equal', cmap = colormap, vmin = 0, vmax = 1)
 			plt.axis('off')
 			plt.title(channel.capitalize()+ ' channel')
 		
@@ -241,7 +241,7 @@ class Raw_img():
 					os.makedirs(self.img_loc + self.ext + '/' + channel + '_channel/')
 				# save image
 				plt_name = self.img_loc + self.ext + '/' + channel + '_channel/' + self.filename + '.png'
-				plt.imsave(plt_name,getattr(self, channel), cmap = colormap)
+				plt.imsave(plt_name,getattr(self, channel), cmap = colormap, vmin = 0, vmax = 1)
 
 
 
@@ -360,7 +360,36 @@ class Raw_img():
 			# horizontal standard deviation of each strip
 			self.rho[self.time, l, 'std'].fillna( value = np.std(df, axis = 1) , inplace = True)
 					
+
+	def interface_height(self, method = 'threshold', **kwargs):
+		'''finds the interface height between the ambient and buoyant fluid to compare against prediction
+		method = str - threshold - interface is define at a threshold value			
+						grad - find the maximum gradient
+						grad2 - finds the max turning point and scales it on either the front of the 
+						box or the back relative to the camera position and which way parallax is working
+						canny - use canny edge deteciton algorithm
+						'''
+		if method == 'threshold':
+			try:
+				def get_first_non_null(x):
+					if x.first_valid_index() is None:
+						return 0
+					else:
+						return x.first_valid_index()
+				# conditional any number greater than 'thres_val' is NaN
+				self.interface = self.box_strip[self.box_strip < kwargs['thres_val']].apply(get_first_non_null, axis = 0).rename(self.time)
 				
+			except KeyError as e:
+				print('threshold method requires' + e + 'kwarg')
+	
+
+		
+		
+		
+		
+		
+
+
 
 
 # -------------------------------------------------------
@@ -558,8 +587,11 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 	plt.close()
 
 
-def plot_density(img, box_dims):
-	'''saves plot of the density profiles'''
+def plot_density(img, box_dims, theory_df, **kwargs):
+	'''saves plot of the density profiles
+	img - class RAW_img instance
+	box_dims - dictionary with the door location etc
+	theory_df - dataframe with the theory  steadystate interface height'''
 
 	if not os.path.exists(img.img_loc + 'analysis/single_density_profiles'):
 		os.mkdir(img.img_loc + 'analysis/single_density_profiles')
@@ -571,23 +603,36 @@ def plot_density(img, box_dims):
 		ax1.fill_betweenx(box_dims['h/H'], img.rho[img.time, l, 'mean']  + 2*img.rho[ img.time, l, 'std'], 
 		img.rho[ img.time, l, 'mean'] - 2*img.rho[ img.time, l, 'std'], alpha = 0.2)
 
+	ax1.plot([0,1],[img.interface.mean(), img.interface.mean()], label = 'interface height', ls = '--')
+	ax1.fill_between( [0,1], img.interface.mean() + 2*img.interface.std(), img.interface.mean() - 2*img.interface.std(), alpha = 0.2)
 	ax1.set_xlim( [0, 1] )
 	ax1.set_ylim( [0, max(box_dims['h/H'])] )
 	ax1.set_title('Uncalibrated density profiles')
 	ax1.set_ylabel('h/H')
 	ax1.set_xlabel('$I/I_0$')	
 	ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level', color = 'r')
+	theory_interface = theory_df.loc[img.bottom_opening_diameter, img.side_opening_height]
+	ax1.plot([0,1], [theory_interface, theory_interface], label = 'steady state', ls = '--')
+	
 	ax1.legend()
 	
 	# find the closest index to the door in pxels so thta it can be plotted on the image
 	door_idx =  min(range(len(box_dims['h/H'])), key=lambda i: abs(box_dims['h/H'][i]- box_dims['door']))
+	# find the closest index of the interface in pixels so that it can be plotted on the image
+	h = box_dims['h/H']
+	interface_idx = [ min( range(len(box_dims['h/H'])), key=lambda i: abs(h[i]- x)) for x in img.interface]
+
 	ax2.plot([0, len(img.door_strip.columns)+ len(img.box_strip.columns)], [door_idx, door_idx], label = 'door_level', color = 'r')
+	
+	ax2.plot( np.arange(len(img.interface)) + img.door_strip.shape[1], interface_idx, label  = 'interface height', color = 'green' )
 	plt.text( len(img.door_strip.columns)/2 , len(img.door_strip.index)/2 , 'door strip', color = 'k', rotation = 90)
 	plt.text( len(img.door_strip.columns)+len(img.box_strip.columns)/2 , len(img.box_strip.index)/2 , 'box strip', color = 'k', rotation = 90)
 	ax2.plot( [len(img.door_strip.columns), len(img.door_strip.columns)] , [0, len(img.box_strip.index)] , color = 'k' )
-	image = ax2.imshow( pd.concat( [img.door_strip, img.box_strip], axis = 1 ), aspect = 'auto', cmap = 'plasma')
+	image = ax2.imshow( pd.concat( [img.door_strip, img.box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno')
+	
 	image.set_clim(vmin = 0, vmax = 1)
 	ax2.legend()
+	ax2.set_ylim( [len(box_dims['h/H']), 0 ] )
 	fig.colorbar(image, ax = ax2 , orientation = 'vertical')
 	ax2.set_title('Processed Image')
 	ax2.axis('off')

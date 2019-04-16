@@ -4,7 +4,7 @@ import RAW_img
 import PLOT
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import pickle
 #-------------------------------------------#
 
 
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
     # Chose Parameters
-    data_loc = ['190328', '190328_3' ,'190329','190405','190405_2', '190405_3']
+    data_loc = ['190328']#, '190328_3' ,'190329','190405','190405_2', '190405_3']
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
@@ -37,14 +37,15 @@ if __name__ == '__main__':
 
         #crop background imgs and get crop_pos  
         (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
-    
+
+
         #----------------------------------------------------------------
 
         # OPTIONS [0 = NO. 1 = YES]
-        SAVE = 1
+        SAVE = 0
         DENSITY_PROFILES = 1
         INTERFACE_HEIGHT = 1
-        PLOT_DATA = 1
+        PLOT_DATA = 0
 
         count = 0
         for f in filenames: # Analyse in reverse so that the crop images are of the steady state
@@ -53,6 +54,7 @@ if __name__ == '__main__':
              # import image
             img = RAW_img.Raw_img(rel_imgs_dir, f, file_ext)
             img.get_experiment_conditions()
+            img.convert_centre_pixel_coordinate(crop_pos)
 
             if count == 0:
                 metadata = img.get_metadata()
@@ -82,65 +84,87 @@ if __name__ == '__main__':
 
             # split into a door strip and a box strip
             if count == 0:
-                # if csv file doesn't exist
-                if not os.path.isfile(img.img_loc + 'analysis_crop_area.csv'): 
-                    # import the last image for the crop
-                    img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
-                     # global crop area
-                    print('Choose analysis area... \n Ensure the top and bottom are within the depth of the box')
-                    analysis_area = img1.choose_crop()
-                    # Transform global cordinates of analysis area to coordinates on cropped image
-                    analysis_area['x1'] -= crop_pos['x1']
-                    analysis_area['y1'] -= crop_pos['y1']
-                    del(img1)
-                     # save crop coordinates
-                    RAW_img.save_dict(rel_imgs_dir, analysis_area, csv_name = 'analysis_crop_area')
-                else:
-                    # else read in crop coordinates
-                    analysis_area = RAW_img.read_dict(rel_imgs_dir, csv_name = 'analysis_crop_area') 
-
                 # define the door level , box top and bottom returns a dict
-                if not os.path.isfile(img.img_loc + 'box_dims.csv'): 
-                    box_dims = RAW_img.box_dims(img, analysis_area) 
+                try:
+                    with open(rel_imgs_dir + 'box_dims.pickle', 'rb') as pickle_in:
+                        box_dims = pickle.load(pickle_in)
 
-                    RAW_img.save_dict(rel_imgs_dir, box_dims, csv_name = 'box_dims')
-                else:
-                    box_dims = RAW_img.read_dict(rel_imgs_dir, csv_name = 'box_dims')
+                except FileNotFoundError as e:
+                    box_dims = RAW_img.box_dims(img) 
+                    with open(rel_imgs_dir + 'box_dims.pickle', 'wb') as pickle_out:
+                        pickle.dump(box_dims, pickle_out)
+                    
+
+                try:
+                    with open(rel_imgs_dir + 'analysis_area.pickle', 'rb') as pickle_in:
+                        analysis_area = pickle.load(pickle_in)
+                    
+                except FileNotFoundError as e:
+                        img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
+                        img1.crop_img(crop_pos)
+                        print('Choose analysis area... \n Ensure the top and bottom are within the depth of the box')
+                        analysis_area = img1.choose_crop()
+                        with open(rel_imgs_dir + 'analysis_area.pickle', 'wb') as pickle_out:
+                            pickle.dump(analysis_area, pickle_out)                 
+
+                # get the scales of analysis area in dimensionless form for both the front and back of the box.
+                # Door level, vertical and horizontal scale, camera centre.
+                try:
+                    with open(rel_imgs_dir + 'analysis/scales.pickle', 'rb') as pickle_in:
+                        scales = pickle.load(pickle_in)
+                except (FileNotFoundError) as e:
+                    scales = RAW_img.make_dimensionless(img,box_dims,analysis_area)
+                    with open(rel_imgs_dir + 'analysis/scales.pickle', 'wb') as pickle_out:
+                        pickle.dump(scales, pickle_out) 
+
+                # unpack the tuple
+                centre = scales[0]
+                door_scale = scales[1]
+                vertical_scale = scales[2]
+                horizontal_scale = scales[3]   
+
+
 
             # Define crop 
             if count ==  len(filenames)-1:
                 # Save analysis area for last image
-                img.define_analysis_strips(analysis_area, box_dims, door_strip_width = 200, save = True)
+                img.define_analysis_strips(analysis_area, vertical_scale, door_strip_width = 200, save = True)
             else:
-                img.define_analysis_strips(analysis_area, box_dims,  door_strip_width = 200)
+                img.define_analysis_strips(analysis_area, vertical_scale,  door_strip_width = 200)
+            
             # get 1d density distribution
 
             if DENSITY_PROFILES == 1:
                 # get one d density profiles
-                img.one_d_density(box_dims)
+                img.one_d_density(vertical_scale)
                 
                 if count == 0: 
                     # make dataframes on first image
-                    df_rho = pd.DataFrame(img.rho)
+                    df_front_rho = pd.DataFrame(img.front_rho)
+                    df_back_rho = pd.DataFrame(img.back_rho)
                 else:
                     # Add to dataframe
-                    df_rho = pd.concat([df_rho,img.rho], axis = 1)
-            #print(df_rho.head())
+                    df_front_rho = pd.concat([df_front_rho,img.front_rho], axis = 1)
+                    df_back_rho = pd.concat([df_back_rho,img.back_rho], axis = 1)
+
             # get the interface position
             if INTERFACE_HEIGHT == 1:
-                img.interface_height(method = 'threshold', thres_val = 0.85)
+                # img.interface_height(method = 'threshold', thres_val = 0.85)
+                img.interface_height(method = 'grad')
+                exit()
                 if count == 0:
                     # make dataframe on first image
                     try:
-                        df_interface = pd.DataFrame(img.interface)
+                        df_front_interface = pd.DataFrame(img.front_interface)
+                        df_back_interface = pd.DataFrame(img.back_interface)
                     except AttributeError as e:
                         print('img.interface doesn''t exist, check that eveything works on the .interface_height method')
                 else:
-                    df_interface = pd.concat([df_interface, img.interface], axis = 1)
+                    df_front_interface = pd.concat([df_front_interface, img.front_interface], axis = 1)
+                    df_back_interface = pd.concat([df_back_interface, img.back_interface], axis = 1)
             
             if PLOT_DATA == 1:
-                RAW_img.plot_density(img, box_dims, theory_df, thres_val = 0.85)
-
+                RAW_img.plot_density(img, door_scale, theory_df)
         #    if count % 10 == 0:
             #    img.save_histogram(metadata)
             # save cropped red image
@@ -152,13 +176,11 @@ if __name__ == '__main__':
             '- folder ' + str(data_loc.index(data) +1) + ' of ' + str(len(data_loc)) )
             count += 1
     
-        # Write dataframes to csv
-        if os.path.isfile(rel_imgs_dir+ 'analysis/rho.csv'):
-            os.remove(rel_imgs_dir+ 'analysis/rho.csv')
-        df_rho.to_csv(rel_imgs_dir + 'analysis/rho.csv', sep = ',', index = True)
-        if os.path.isfile(rel_imgs_dir+ 'analysis/interface.csv'):
-            os.remove(rel_imgs_dir+ 'analysis/interface.csv')
-        df_interface.to_csv(rel_imgs_dir + 'analysis/interface.csv', sep = ',', index = True)
+        # Write dataframes to pickle
+        for df, df_str in zip([df_front_rho, df_back_rho,df_front_interface,df_back_interface], ['front_rho','back_rho','front_interface','back_interface']):
+            fname = rel_imgs_dir + 'analysis/' + df_str + '.pickle'
+            with open(fname, 'wb') as pickle_out:
+                pickle.dump(df, pickle_out) 
 
 
  

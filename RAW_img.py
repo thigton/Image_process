@@ -155,7 +155,7 @@ class Raw_img():
 			print(str(e)+' - need to run crop_img to get histogram!')
 
 
-	def choose_crop(self):
+	def choose_crop(self, **kwargs):
 		'''method is allows user to return a suitable crop area'''
 
 		# Show an image in interactive mode
@@ -174,7 +174,7 @@ class Raw_img():
 
 		response = 'no'
 		while 'y' not in response.lower():
-			
+
 			# input position of the crop        
 			x1 = int(input('x-coordinate of the top left corner: '))
 			y1 = int(input('y-coordinate of the top left corner: '))
@@ -194,8 +194,7 @@ class Raw_img():
 
 
 	def crop_img(self, crop_pos):
-		"""Crops the image to the space you want, if check_crop = True, the image will be displayed 
-		and you have the option of re aligning if you want """
+		"""Crops the image to the space you want. Based on predefines crop coordinates """
 		
 		# Input the 
 		self.crop_x1 = crop_pos['x1']
@@ -243,6 +242,11 @@ class Raw_img():
 				plt_name = self.img_loc + self.ext + '/' + channel + '_channel/' + self.filename + '.png'
 				plt.imsave(plt_name,getattr(self, channel), cmap = colormap, vmin = 0, vmax = 1)
 
+	def convert_centre_pixel_coordinate(self,crop_pos):
+		'''returns the new coordinates of the centre point of the image based on the crop in crop_pos'''
+		x = self.width/2 - crop_pos['x1']
+		y = self.height/2 - crop_pos['y1']
+		self.centre = (x,y)
 
 
 	def black_offset(self,metadata, method = 0, *blk_imgs):
@@ -304,7 +308,7 @@ class Raw_img():
 
 
 
-	def define_analysis_strips(self, crop_pos, box_dims, door_strip_width = 100, channel = 'red', save = False):
+	def define_analysis_strips(self, crop_pos, vertical_scale, door_strip_width = 100, channel = 'red', save = False):
 		'''defines an area of processed image of channel ... to analyse.
 		returns pd.dataframes of the door strip and the box strip
 		img = RAW_img class object
@@ -323,8 +327,10 @@ class Raw_img():
 		# y-coordinate of the bottom of the 
 		y2 = y1 + height 
 
-		self.door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(box_dims['h/H'] , name = 'h/H'))
-		self.box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(box_dims['h/H'] , name = 'h/H'))
+		self.front_door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[0] , name = 'h/H'))
+		self.back_door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H'))
+		self.front_box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H'))
+		self.back_box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H'))
 		if save == True:
 			plt.ion()
 			ax = plt.axes()
@@ -344,21 +350,23 @@ class Raw_img():
 		
 		
 
-	def one_d_density(self, box_dims, save_fig = False):
+	def one_d_density(self, vertical_scale, save_fig = False):
 		'''finds horizontal average and standard deviation of box_strip and door_strip) 
 		and appends dataframe to a csv file containing this information for all images in the experiment.'''
 		
 		# initialise dataframe with h/H data in place
 		columns = pd.MultiIndex.from_product([[self.time] , ['door', 'box'], ['mean','std'] ], names = ['time','data','attribute'])
-		idx = pd.Series(box_dims['h/H'] , name = 'h/H')
-		self.rho = pd.DataFrame(index = idx , columns = columns)
+		idx_front = pd.Series(vertical_scale[0] , name = 'h/H')
+		self.front_rho = pd.DataFrame(index = idx_front , columns = columns)
+		idx_back = pd.Series(vertical_scale[1] , name = 'h/H')
+		self.back_rho = pd.DataFrame(index = idx_back , columns = columns)
 
-		
-		for df, l in zip([self.door_strip,self.box_strip], ['door','box']):
-			# horizontal mean of each strip
-			self.rho[self.time, l, 'mean'].fillna( value = np.mean(df, axis = 1) , inplace = True)
-			# horizontal standard deviation of each strip
-			self.rho[self.time, l, 'std'].fillna( value = np.std(df, axis = 1) , inplace = True)
+		for scale in ['front','back']:
+			for df, l in zip([getattr(self,scale +'_door_strip'),getattr(self,scale +'_box_strip')], ['door','box']):
+				# horizontal mean of each strip
+				getattr(self,scale + '_rho')[self.time, l, 'mean'].fillna( value = np.mean(df, axis = 1) , inplace = True)
+				# horizontal standard deviation of each strip
+				getattr(self,scale + '_rho')[self.time, l, 'std'].fillna( value = np.std(df, axis = 1) , inplace = True)
 					
 
 	def interface_height(self, method = 'threshold', **kwargs):
@@ -373,24 +381,29 @@ class Raw_img():
 			try:
 				def get_first_non_null(x):
 					if x.first_valid_index() is None:
-						return 0
+						return 0 
 					else:
 						return x.first_valid_index()
 				# conditional any number greater than 'thres_val' is NaN
-				self.interface = self.box_strip[self.box_strip < kwargs['thres_val']].apply(get_first_non_null, axis = 0).rename(self.time)
-				
+				self.front_interface = self.front_box_strip[self.front_box_strip < kwargs['thres_val']].apply(get_first_non_null, axis = 0).rename(self.time)
+				self.back_interface = self.back_box_strip[self.back_box_strip < kwargs['thres_val']].apply(get_first_non_null, axis = 0).rename(self.time)
 			except KeyError as e:
 				print('threshold method requires' + e + 'kwarg')
 	
+		if method == 'grad':
+			try:
+				#self.front_interface = self.front_box_strip.apply(lambda x : np.gradient(x, axis = 1))
+				print(self.front_box_strip.shape)
+				print(self.front_interface.shape)
+				
+					
+			except:
+				pass
 
-		
-		
-		
-		
-		
-
-
-
+		if method == 'grad2':
+			pass
+		if method == 'canny':
+			pass
 
 # -------------------------------------------------------
 #Functions
@@ -493,42 +506,121 @@ def read_dict(dict_loc, csv_name):
 
 	return d
 
-def box_dims(img, crop_pos): # cant just apply to the analysis space as you can't see the
-	'''CAREFUL - pixel posiiton will be taken after the initial crop and then transformed into the analysis form
-	returns a dictionary of the door height relative to the top of the analysis area, and
-	a scale of h/H of the analysis area '''
+def box_dims(img): # cant just apply to the analysis space as you can't see the
+	'''pick the dimensions of the box returns the (x,y) coordinates of the top left and bottom 
+	right corner of both the front and back of the box as well as the level of the door. IN PIXELS '''
 	# Show an image in interactive mode
 	plt.ion()
 	ax = plt.axes()
 	ax.imshow(img.image)
+
+	# get a door level
 	response = 'no'
 	while 'y' not in response.lower():
 		door = int(input('Input the level of the door by eye:'))
 		l = Line2D( [0, img.image.shape[1]], [door,door] , linewidth = 1, color = 'r', visible = True)
 		ax.add_line(l)
-		top = int(input('Input the level of the top of the back of the box:'))
-		bottom = int(input('Input the level of the bottom of the back of the box:'))
-		if (top > crop_pos['y1']) or (bottom < crop_pos['y1']+crop_pos['height']):
-			print('analysis area should be within the depth of the box, \n kill the script and go back and redefine your analysis area.')
-			exit()
-		l2 = Line2D( [0, img.image.shape[1]], [top,top] , linewidth = 1, color = 'r', visible = True)
-		ax.add_line(l2)
-		l3 = Line2D( [0, img.image.shape[1]], [bottom,bottom] , linewidth = 1, color = 'r', visible = True)
-		ax.add_line(l3)
-		plt.draw()
 		response = input('Are you happy with the door level?  Do you want to continue? [Y/N]')
+		l.set_visible(False)
+	
+	# get dimensions of the back of the box
+	response = 'no'
+	print('BACK of the box dimensions')
+	while 'y' not in response.lower():
+		y1_back = int(input('Input the level of the top of the BACK of the box:'))
+		l = Line2D( [0, img.image.shape[1]], [y1_back,y1_back] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l)
+		y2_back = int(input('Input the level of the bottom of the BACK of the box:'))
+		l2 = Line2D( [0, img.image.shape[1]], [y2_back,y2_back] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l2)
+		x1_back = int(input('Input the location of the lefthand side of the BACK of the box: '))
+		l3 = Line2D([x1_back,x1_back], [0, img.image.shape[0]] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l3)
+		x2_back = int(input('Input the location of the righthand side of the BACK of the box: '))
+		l4 = Line2D([x2_back,x2_back], [0, img.image.shape[0]] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l4)
+		plt.draw()
+		response = input('Are you happy with the dimensions given for the back of the box?  Do you want to continue? [Y/N]')
 		l.set_visible(False)
 		l2.set_visible(False)
 		l3.set_visible(False)
+		l4.set_visible(False)
+
+	# get dimensions of the front of the box
+	response = 'no'
+	print('FRONT of the box dimensions')
+	while 'y' not in response.lower():
+		y1_front = int(input('Input the level of the top of the FRONT of the box:'))
+		l = Line2D( [0, img.image.shape[1]], [y1_front,y1_front] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l)
+		y2_front = int(input('Input the level of the bottom of the FRONT of the box:'))
+		l2 = Line2D( [0, img.image.shape[1]], [y2_front,y2_front] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l2)
+		x1_front = int(input('Input the location of the lefthand side of the FRONT of the box: '))
+		l3 = Line2D([x1_front,x1_front], [0, img.image.shape[0]] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l3)
+		x2_front = int(input('Input the location of the righthand side of the FRONT of the box: '))
+		l4 = Line2D([x2_front,x2_front], [0, img.image.shape[0]] , linewidth = 1, color = 'r', visible = True)
+		ax.add_line(l4)
+		plt.draw()
+		response = input('Are you happy with the dimensions given for the front of the box?  Do you want to continue? [Y/N]')
+		l.set_visible(False)
+		l2.set_visible(False)
+		l3.set_visible(False)
+		l4.set_visible(False)
 
 	plt.ioff()	
 	plt.close()
-	
-	scale = np.linspace(1,0,bottom - top) # create scale of box between 0 and 1
-	y1_idx = crop_pos['y1'] - top # this should return the index of the top of the analysis area on scale.
-	y2_idx = crop_pos['y1']+ crop_pos['height'] - top # same for the bottom
-	return {'door' : scale[door-top], 'h/H': scale[y1_idx:y2_idx]}
+		
+	return {'door' : door, 'b_x1' : x1_back, 'b_y1' : y1_back, 'b_x2': x2_back, 'b_y2':y2_back , 
+	'f_x1': x1_front,'f_y1':y1_front, 'f_x2': x2_front, 'f_y2':y2_front }
 
+def make_dimensionless(img,box_dims,analysis_area):
+	'''converts the pixels of the analysis area into dimensionless form based on the dimensions of the box
+	returns dict of door level, vertical and horizontal scale and camera centre for both the front and back of the box'''
+
+	front_vertical_scale = np.linspace(1,0,box_dims['f_y2'] - box_dims['f_y1']) # create scale of front box between 0 and 1
+	back_vertical_scale = np.linspace(1,0,box_dims['b_y2'] - box_dims['b_y1']) # create scale of  front box between 0 and 1
+
+	#slicing the scale to just cover the analysis area
+	f_v_scale = front_vertical_scale[ int(analysis_area['y1'] - box_dims['f_y1']) : int(analysis_area['y1']+ analysis_area['height'] - box_dims['f_y1'])]
+	b_v_scale = back_vertical_scale[ int(analysis_area['y1'] - box_dims['b_y1']) : int(analysis_area['y1']+ analysis_area['height'] - box_dims['b_y1'])]
+	
+	
+
+	# now create the horizontal scales
+	front_horizontal_scale = np.linspace(0,1,box_dims['f_x2'] - box_dims['f_x1']) # create scale of  front box between 0 and 1
+	back_horizontal_scale = np.linspace(0,1,box_dims['b_x2'] - box_dims['b_x1']) # create scale of  front box between 0 and 1
+
+	f_h_scale = front_horizontal_scale[ int(analysis_area['x1'] - box_dims['f_x1']) : int(analysis_area['x1']+ analysis_area['width'] - box_dims['f_x1'])]
+	b_h_scale = back_horizontal_scale[ int(analysis_area['x1'] - box_dims['b_x1']) : int(analysis_area['x1']+ analysis_area['width'] - box_dims['b_x1'])]
+
+
+	door_level = pd.DataFrame(index = ['door'], columns= ['front','back'])
+	# door height scaled on the front and back
+	door_level.loc['door','front'] = front_vertical_scale[int(box_dims['door'] - box_dims['f_y1'])]
+	door_level.loc['door','back'] = back_vertical_scale[int( box_dims['door'] - box_dims['b_y1'])] 
+
+	door_level.to_csv(img.img_loc + 'analysis/door_level.csv', sep = ',', index = True)
+	
+	
+	centre_position = pd.DataFrame(index = ['centre'], columns= ['horizontal','vertical'])
+	# give the centre of the raw image a value on the horizonatal and vertical scale
+	# if the centre is outside the scale range (outside the box) then...
+	if int(img.centre[1] - box_dims['f_y1']) > len(front_vertical_scale): 
+		centre_position.loc['centre','vertical'] = front_vertical_scale[int(img.centre[1] - box_dims['f_y1'] - len(front_vertical_scale))] - 1
+	else:
+		centre_position.loc['centre','vertical'] = front_vertical_scale[int(img.centre[1] - box_dims['f_y1'])]
+
+	# if the centre is outside the scale range (outside the box) then...
+	if int(img.centre[0] - box_dims['f_x1']) < 0 :
+		centre_position.loc['centre','horizontal'] = front_horizontal_scale[int(img.centre[0] - box_dims['f_x1'] + len(front_horizontal_scale))] - 1
+	else:
+		centre_position.loc['centre','horizontal'] = front_horizontal_scale[int(img.centre[0] - box_dims['f_x1']) ] 
+
+	centre_position.to_csv(img.img_loc + 'analysis/centre_positon.csv', sep = ',', index = True)
+
+	return (centre_position, door_level ,(f_v_scale,b_v_scale), (f_h_scale, b_h_scale))
 
 
 
@@ -537,7 +629,7 @@ def box_dims(img, crop_pos): # cant just apply to the analysis space as you can'
 # Plotting functions
 #########################################################
 
-def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, number_of_plots = 10):
+def plot_density_transient(df , door, time, save_loc, steadystate = 500, number_of_plots = 10):
 	'''function will save a figure containing 'x' equally spaced (in time)
 	plots of the 1D density profile which appears in the dataframe df,
 	'''
@@ -545,8 +637,6 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 	plt.style.use('seaborn-white')
 	fig, (ax1,ax2) = plt.subplots(1, 2, sharey=True, figsize = (12, 9))
 	
-	# define the y axis
-	yax = df.index.tolist()
 	# find index closest to the steadystate time
 	idx_ss = min(range(len(time)), key=lambda i: abs(time[i]- steadystate))
 	# get regular spacing of images in the transient phase
@@ -557,9 +647,9 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 	for t in time1:
 		# plot box strip
 
-		ax1.plot(df[ str(t), 'box', 'mean'] , yax, label = str(t) + ' sec' )
-		ax1.fill_betweenx(yax, df[ str(t), 'box', 'mean']  + 2*df[ str(t), 'box', 'std'], 
-		df[ str(t), 'box', 'mean'] - 2*df[ str(t), 'box', 'std'], alpha = 0.2)
+		ax1.plot(df[ t, 'box', 'mean'] , df.index, label = str(t) + ' sec' )
+		ax1.fill_betweenx(df.index, df[ t, 'box', 'mean']  + 2*df[ t, 'box', 'std'], 
+		df[ t, 'box', 'mean'] - 2*df[ t, 'box', 'std'], alpha = 0.2)
 		ax1.set_xlim( [0, 1] )
 		ax1.set_title('Box strip')
 		
@@ -567,10 +657,10 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 		ax1.set_xlabel('$I/I_0$')	
 		ax1.legend()
 
-		# plot door strip
-		ax2.plot(df[ str(t), 'door', 'mean'] , yax, label = str(t) + ' sec' )
-		ax2.fill_betweenx(yax, df[ str(t), 'door', 'mean'] - 2*df[ str(t), 'door', 'std']  , 
-		df[ str(t), 'door', 'mean'] + 2*df[ str(t), 'door', 'std'], alpha = 0.2)
+		# plot door	
+		ax2.plot(df[ t, 'door', 'mean'] , df.index, label = str(t) + ' sec' )
+		ax2.fill_betweenx(df.index, df[ t, 'door', 'mean'] - 2*df[ t, 'door', 'std']  , 
+		df[ t, 'door', 'mean'] + 2*df[ t, 'door', 'std'], alpha = 0.2)
 		ax2.set_xlim( [0, 1] )
 		ax2.set_title('Door strip')
 		
@@ -579,18 +669,17 @@ def plot_density_transient(df , box_dims, time, save_loc, steadystate = 500, num
 		ax2.legend()
 
 
-	ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
-	ax2.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level')
+	ax1.plot([0,1], [door['front'], door['front']], label = 'door_level')
+	ax2.plot([0,1], [door['front'], door['front']], label = 'door_level')
 	ax1.set_ylim([0, 1])
 	fig.suptitle('vertical density profiles' )
 	plt.savefig(save_loc + 'rho_profile_transient.png')
 	plt.close()
 
-
-def plot_density(img, box_dims, theory_df, **kwargs):
-	'''saves plot of the density profiles
+def plot_density(img, door, theory_df):
+	'''saves plot of the density profiles scaled on the front of the box
 	img - class RAW_img instance
-	box_dims - dictionary with the door location etc
+	door - level of the door scale on the front of the box
 	theory_df - dataframe with the theory  steadystate interface height'''
 
 	if not os.path.exists(img.img_loc + 'analysis/single_density_profiles'):
@@ -599,43 +688,89 @@ def plot_density(img, box_dims, theory_df, **kwargs):
 	plt.style.use('seaborn-white')
 	fig, (ax1,ax2) = plt.subplots(1, 2, figsize = (12, 9))
 	for l in ['box', 'door']:
-		ax1.plot(img.rho[img.time, l, 'mean'], box_dims['h/H'], label = l + ' strip' )
-		ax1.fill_betweenx(box_dims['h/H'], img.rho[img.time, l, 'mean']  + 2*img.rho[ img.time, l, 'std'], 
-		img.rho[ img.time, l, 'mean'] - 2*img.rho[ img.time, l, 'std'], alpha = 0.2)
+		ax1.plot(img.front_rho[img.time, l, 'mean'], img.front_rho.index, label = l + ' strip' )
+		ax1.fill_betweenx(img.front_rho.index, img.front_rho[img.time, l, 'mean']  + 2*img.front_rho[ img.time, l, 'std'], 
+		img.front_rho[ img.time, l, 'mean'] - 2*img.front_rho[ img.time, l, 'std'], alpha = 0.2)
 
-	ax1.plot([0,1],[img.interface.mean(), img.interface.mean()], label = 'interface height', ls = '--')
-	ax1.fill_between( [0,1], img.interface.mean() + 2*img.interface.std(), img.interface.mean() - 2*img.interface.std(), alpha = 0.2)
+	ax1.plot([0,1],[img.front_interface.mean(), img.front_interface.mean()], label = 'interface height', ls = '--')
+	ax1.fill_between( [0,1], img.front_interface.mean() + 2*img.front_interface.std(), img.front_interface.mean() - 2*img.front_interface.std(), alpha = 0.2)
 	ax1.set_xlim( [0, 1] )
-	ax1.set_ylim( [0, max(box_dims['h/H'])] )
+	ax1.set_ylim( [0, max(img.front_rho.index)] )
 	ax1.set_title('Uncalibrated density profiles')
 	ax1.set_ylabel('h/H')
 	ax1.set_xlabel('$I/I_0$')	
-	ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level', color = 'r')
+	ax1.plot([0,1], [door['front'], door['front']], label = 'door_level', color = 'r')
 	theory_interface = theory_df.loc[img.bottom_opening_diameter, img.side_opening_height]
 	ax1.plot([0,1], [theory_interface, theory_interface], label = 'steady state', ls = '--')
-	
 	ax1.legend()
-	
-	# find the closest index to the door in pxels so thta it can be plotted on the image
-	door_idx =  min(range(len(box_dims['h/H'])), key=lambda i: abs(box_dims['h/H'][i]- box_dims['door']))
-	# find the closest index of the interface in pixels so that it can be plotted on the image
-	h = box_dims['h/H']
-	interface_idx = [ min( range(len(box_dims['h/H'])), key=lambda i: abs(h[i]- x)) for x in img.interface]
 
-	ax2.plot([0, len(img.door_strip.columns)+ len(img.box_strip.columns)], [door_idx, door_idx], label = 'door_level', color = 'r')
-	
-	ax2.plot( np.arange(len(img.interface)) + img.door_strip.shape[1], interface_idx, label  = 'interface height', color = 'green' )
-	plt.text( len(img.door_strip.columns)/2 , len(img.door_strip.index)/2 , 'door strip', color = 'k', rotation = 90)
-	plt.text( len(img.door_strip.columns)+len(img.box_strip.columns)/2 , len(img.box_strip.index)/2 , 'box strip', color = 'k', rotation = 90)
-	ax2.plot( [len(img.door_strip.columns), len(img.door_strip.columns)] , [0, len(img.box_strip.index)] , color = 'k' )
-	image = ax2.imshow( pd.concat( [img.door_strip, img.box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno')
-	
-	image.set_clim(vmin = 0, vmax = 1)
+	#find the closest index to the door in pixels so that it can be plotted on the image
+	door_idx =  min( range(img.front_rho.shape[0]) , key = lambda i : abs(img.front_rho.index[i]- door.loc['door','front']) )
+
+	#find the closest index of the interface in pixels so that it can be plotted on the image
+	#h = img.front_rho.index
+	interface_idx = [ min( range(img.front_rho.shape[0]), key = lambda i : abs(img.front_rho.index[i]- x)) for x in img.front_interface]
+
+	ax2.plot([0, len(img.front_door_strip.columns)+ len(img.front_box_strip.columns)], [door_idx, door_idx], label = 'door_level', color = 'r')
+	ax2.plot( np.arange(len(img.front_interface)) + img.front_door_strip.shape[1], interface_idx, label  = 'interface height', color = 'green' )
+	plt.text( len(img.front_door_strip.columns)/2 , len(img.front_door_strip.index)/2 , 'door strip', color = 'k', rotation = 90)
+	plt.text( len(img.front_door_strip.columns)+len(img.front_box_strip.columns)/2 , len(img.front_box_strip.index)/2 , 'box strip', color = 'k', rotation = 90)
+	ax2.plot( [len(img.front_door_strip.columns), len(img.front_door_strip.columns)] , [0, len(img.front_box_strip.index)] , color = 'k' )
+	image = ax2.imshow( pd.concat( [img.front_door_strip, img.front_box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno', vmin = 0, vmax = 1)
+	plt.colorbar(image,ax = ax2, orientation = 'vertical')
 	ax2.legend()
-	ax2.set_ylim( [len(box_dims['h/H']), 0 ] )
-	fig.colorbar(image, ax = ax2 , orientation = 'vertical')
+	ax2.set_ylim( [len(img.front_rho.index), 0 ] )
 	ax2.set_title('Processed Image')
 	ax2.axis('off')
 	fig.suptitle( f'Side opening height: {str(img.side_opening_height)}mm \n Bottom opening diameter: {str(img.bottom_opening_diameter)}mm \n {img.filename} - {str(img.time)}sec' )
 	plt.savefig(img.img_loc + '/analysis/single_density_profiles/rho_profile_' + str(img.time) + 'secs.png')
+	plt.close()
+	del(image)
+
+
+
+def plot_density_compare_scales(rel_data_dir, data, door, theory_df, exp_conditons):
+	'''saves plot of the density profiles
+	rel_data_dir - location of the data so it goes in the right folder
+	data - this is a list of dataframes to plot
+	[0] - density profile scaled on the front of the box
+	[1] - density profile scaled on the back of the box
+	[2] - interface height scaled on the front of the box
+	[3] - interface height scaled on the back of the box
+	door_scale - door level
+	theory_df - dataframe with the theory  steadystate interface height'''
+
+	time = data[2].name
+
+	if not os.path.exists(rel_data_dir + 'compare_scales'):
+		os.mkdir(rel_data_dir + 'compare_scales')
+	
+	plt.style.use('seaborn-white')
+	fig = plt.figure(figsize = (12, 9))
+	ax1 = fig.add_axes([0.1,0.1,0.8,0.8])
+	
+	for i, scale, c in zip(range(2), ['front','back'], ['red','blue']):
+		#density profiles
+		ax1.plot(data[i]['box', 'mean'], data[i].index , label = 'box strip -' + scale , color = c)
+		ax1.fill_betweenx(data[i].index , data[i]['box', 'mean']  + 2*data[i]['box', 'std'], 
+		data[i]['box', 'mean'] - 2*data[i]['box', 'std'], alpha = 0.2, color = c)
+		#interface height
+		ax1.plot([0,1],[data[i+2].mean(), data[i+2].mean()], label = 'interface height - front', ls = '--', color = c)
+		ax1.fill_between( [0,1], data[i+2].mean() + 2*data[i+2].std(), data[i+2].mean() - 2*data[i+2].std(), alpha = 0.2, color = c)
+		#door level
+		ax1.plot([0,1], [door[scale], door[scale]], label = 'door_level - ' + scale , lw = 2, color = c)
+
+	ax1.set_xlim( [0, 1] )
+	
+	ax1.set_ylim( [0, max(data[0].index.tolist() + data[1].index.tolist())] )
+	ax1.set_title('Uncalibrated transmittance profiles')
+	ax1.set_ylabel('h/H')
+	ax1.set_xlabel('$I/I_0$')	
+
+	theory_interface = theory_df.loc[exp_conditons['bod'], exp_conditons['soh']]
+	ax1.plot([0,1], [theory_interface, theory_interface], label = 'steady state', ls = ':', lw = 2 , color = 'black')
+	ax1.legend()
+	
+	ax1.set_title( f'Side opening height: {str(exp_conditons["soh"])}mm \n Bottom opening diameter: {str(exp_conditons["bod"])}mm \n {str(time)}sec' )
+	plt.savefig(rel_data_dir + 'compare_scales/' + str(time) + 'secs.png')
 	plt.close()

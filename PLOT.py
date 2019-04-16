@@ -4,7 +4,7 @@ import os
 import RAW_img
 import matplotlib.pyplot as plt
 import csv
-
+import pickle
 
 
 def steadystate(df, time, data_loc):
@@ -22,8 +22,8 @@ def steadystate(df, time, data_loc):
     box_roll_diff = box_mean - box_roll
 
     # find the first column in the box_roll_diff where it meets the threshold criteria
-    thres_percent = 0.85 # 85% of the values
-    thres_val = 0.005 # have less than 0.5% difference from the rolling mean
+    thres_percent = 0.90 # 85% of the values
+    thres_val = 0.004 # have less than 0.5% difference from the rolling mean
     for col in box_roll_diff.columns[n:]:
         if sum(abs(box_roll_diff[col]) < thres_val)/len(box_roll_diff[col]) > thres_percent:
             time_ss = int(col)
@@ -37,8 +37,8 @@ def steadystate(df, time, data_loc):
     fig, (ax1,ax2) = plt.subplots(1, 2, figsize = (12, 9))
     timex = time[time_ss_idx::5] # only plot every 5 just for the graph
     for t in timex:
-        ax2.plot(box_roll_diff[str(t)] , box_roll_diff.index.values, label = str(t))
-        ax1.plot(box_roll[str(t)], box_roll.index.values, label = str(t))
+        ax2.plot(box_roll_diff[t] , box_roll_diff.index.values, label = str(t))
+        ax1.plot(box_roll[t], box_roll.index.values, label = str(t))
     ax1.legend()
     ax2.legend()
     ax2.set_title('diffrence between rolling time average and instance')
@@ -84,8 +84,8 @@ def experiment_conditions_as_dict(data_loc):
 def timeaverage(df , time, time_ss, data_loc):
     '''returns a dataframe with the time averaged denisty profile (mean and std) after the identified steady state
     note std can be calculated by averaging the variance and then sqrt to get std.'''
-    box_mean = df.xs(key = ('box', 'mean'), level = [1,2] , axis = 1).loc[:, [str(x) for x in time if x >= time_ss]]
-    box_std = df.xs(key = ('box', 'std'), level = [1,2] , axis = 1).loc[:, [str(x) for x in time if x >= time_ss]]
+    box_mean = df.xs(key = ('box', 'mean'), level = [1,2] , axis = 1).loc[:, [x for x in time if x >= time_ss]]
+    box_std = df.xs(key = ('box', 'std'), level = [1,2] , axis = 1).loc[:, [x for x in time if x >= time_ss]]
     box_var = box_std.apply(lambda x : x**2)
 
     box_mean_timeave = pd.Series(box_mean.mean(axis = 1 , skipna = True), name = 'mean')
@@ -94,7 +94,7 @@ def timeaverage(df , time, time_ss, data_loc):
     return pd.concat([box_mean_timeave, box_std_timeave] , axis =1) 
 
 
-def plot_timeaverage(df_dict, exp_conditions, box_dims, theory_df):
+def plot_timeaverage(df_dict, exp_conditions, door, theory_df):
     '''takes in a dictionary of dataframes of the timeaverage values and saves a plot
     WARNING MAKE SURE THAT THE SAME SOLUTION HAS BEEN USED ON THE EXPERIMENTS YOU WANT TO COMPARE'''
     
@@ -111,7 +111,7 @@ def plot_timeaverage(df_dict, exp_conditions, box_dims, theory_df):
         theory_interface = theory_df.loc[exp_conditions[k]['bod'], exp_conditions[k]['soh']]
         ax1.plot([0,1], [theory_interface, theory_interface], color = c , ls = '--')
         ax1.fill_betweenx(v['std'].index.values, v['mean'] - 2*v['std']  , v['mean'] + 2*v['std'], alpha = 0.2)
-    ax1.plot([0,1], [box_dims['door'], box_dims['door']], label = 'door_level', color = 'black')
+    ax1.plot([0,1], [door['front'], door['front']], label = 'door_level', color = 'black')
     ax1.set_ylabel('h/H')
     ax1.set_xlabel('$I/I_0$')
     ax1.set_title('Time Averaged Steady State - Experiment comparison \n Theory(--) \n Uncalibrated entrainment, discharge coefficient and virtual origin')
@@ -123,7 +123,7 @@ def plot_timeaverage(df_dict, exp_conditions, box_dims, theory_df):
 
 
 if __name__ == '__main__':
-    data_loc = ['190405','190405_2', '190405_3']
+    data_loc = ['190328']#,'190405','190405_2', '190405_3']
     exp_conditions = {} # dictionary for all the experiement parameters to compare
     time_average = {} # empty dictionary for the time averaged data to be sit in and be compared
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
@@ -136,30 +136,34 @@ if __name__ == '__main__':
         rel_data_dir = 'Data/' + exp + '/analysis/'
 
         try:
-            # read in the dataframe
-            df = pd.read_csv(rel_data_dir + '/rho.csv', sep = ',' , 
-            index_col= [0] , header = [0,1,2] )
+            # read in the dataframes
+            data = {}
+            for df in ['front_rho','back_rho','front_interface','back_interface','scales']:
+                with open(rel_data_dir + df + '.pickle', 'rb') as pickle_in:
+                    data[df] = pickle.load(pickle_in) 
+            door_scale = data['scales'][1]
+    
         except FileNotFoundError:
-            print(f'rho.csv has not been generated for this experiment ({exp}) run in excecute.py')
+            print(f'One of the pickle files can''t has not been generated for this experiment ({exp}) run in excecute.py')
 
         else:
             # time is a list of the time each image was taken.
-            time = sorted( { int(x) for x in df.columns.get_level_values(0) } )
-            time_ss = steadystate(df, time, exp)
-            
-
-
-            #  get the box_dims
-            box_dims = RAW_img.read_dict( rel_data_dir[:-9], csv_name = 'box_dims')
+            time = sorted( { int(x) for x in data['front_rho'].columns.get_level_values(0) } )
             # append the experiement conditons to the main dictionary
             exp_conditions[exp] = experiment_conditions_as_dict(exp)
 
-
+#            for t in time:
+#                data_for_plot = [ data['front_rho'][t], data['back_rho'][t], data['front_interface'][t], data['back_interface'][t] ]
+#                RAW_img.plot_density_compare_scales(rel_data_dir, data_for_plot, door_scale,theory_df, exp_conditions[exp])
+#                
+            
+            time_ss = steadystate(data['front_rho'], time, exp)
+            
 
             # create timeaverage plot
-            time_average[exp] = timeaverage(df, time, time_ss, exp) # time averaged density profiles
+            time_average[exp] = timeaverage(data['front_rho'], time, time_ss, exp) # time averaged density profiles
             
             # Create transient plot
-            RAW_img.plot_density_transient(df, box_dims, time, steadystate = time_ss, save_loc = rel_data_dir)
-          
-    plot_timeaverage(time_average, exp_conditions, box_dims, theory_df)
+            RAW_img.plot_density_transient(data['front_rho'], door_scale, time, save_loc = rel_data_dir, steadystate = time_ss)
+            
+    plot_timeaverage(time_average, exp_conditions, door_scale, theory_df)

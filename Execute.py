@@ -45,7 +45,7 @@ if __name__ == '__main__':
         SAVE = 0
         DENSITY_PROFILES = 1
         INTERFACE_HEIGHT = 1
-        PLOT_DATA = 0
+        PLOT_DATA = 1
 
         count = 0
         for f in filenames: # Analyse in reverse so that the crop images are of the steady state
@@ -150,8 +150,8 @@ if __name__ == '__main__':
             # get the interface position
             if INTERFACE_HEIGHT == 1:
                 # img.interface_height(method = 'threshold', thres_val = 0.85)
-                img.interface_height(method = 'grad')
-                exit()
+                img.interface_height(vertical_scale, method = 'grad', rolling_mean = 50, median_filter = 19)
+
                 if count == 0:
                     # make dataframe on first image
                     try:
@@ -165,8 +165,7 @@ if __name__ == '__main__':
             
             if PLOT_DATA == 1:
                 RAW_img.plot_density(img, door_scale, theory_df)
-        #    if count % 10 == 0:
-            #    img.save_histogram(metadata)
+
             # save cropped red image
             if SAVE == 1:
                 img.disp_img(disp = False, crop= True, save = True, channel = 'red')

@@ -113,7 +113,7 @@ def plot_timeaverage(df_dict, exp_conditions, door, theory_df):
         ax1.fill_betweenx(v['std'].index.values, v['mean'] - 2*v['std']  , v['mean'] + 2*v['std'], alpha = 0.2)
     ax1.plot([0,1], [door['front'], door['front']], label = 'door_level', color = 'black')
     ax1.set_ylabel('h/H')
-    ax1.set_xlabel('$I/I_0$')
+    ax1.set_xlabel('$A$')
     ax1.set_title('Time Averaged Steady State - Experiment comparison \n Theory(--) \n Uncalibrated entrainment, discharge coefficient and virtual origin')
     ax1.set_xlim([0,1])
     ax1.set_ylim([0,1])

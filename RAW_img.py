@@ -13,7 +13,7 @@ from matplotlib.lines import Line2D
 import matplotlib.gridspec as gridspec     
 import sys
 import csv
-
+from scipy.signal import medfilt
 
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
@@ -327,10 +327,18 @@ class Raw_img():
 		# y-coordinate of the bottom of the 
 		y2 = y1 + height 
 
-		self.front_door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[0] , name = 'h/H'))
-		self.back_door_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H'))
-		self.front_box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H'))
-		self.back_box_strip = pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H'))
+		def transmit_to_absorb(df):
+			'''convert the element in the dataframe from Transmittance to Absorbance using the beer lambert law'''
+			return df.applymap(lambda x : 0-np.log(x))
+
+		self.front_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[0] , name = 'h/H')) )
+		self.back_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H')) )
+		self.front_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H')) )
+		self.back_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H')) )
+		
+
+
+
 		if save == True:
 			plt.ion()
 			ax = plt.axes()
@@ -347,7 +355,7 @@ class Raw_img():
 			plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
 			plt.close()
 
-		
+
 		
 
 	def one_d_density(self, vertical_scale, save_fig = False):
@@ -369,7 +377,7 @@ class Raw_img():
 				getattr(self,scale + '_rho')[self.time, l, 'std'].fillna( value = np.std(df, axis = 1) , inplace = True)
 					
 
-	def interface_height(self, method = 'threshold', **kwargs):
+	def interface_height(self, vertical_scale, method = 'threshold', **kwargs):
 		'''finds the interface height between the ambient and buoyant fluid to compare against prediction
 		method = str - threshold - interface is define at a threshold value			
 						grad - find the maximum gradient
@@ -390,18 +398,55 @@ class Raw_img():
 			except KeyError as e:
 				print('threshold method requires' + e + 'kwarg')
 	
-		if method == 'grad':
+		if method == 'grad' or method == 'grad2':
 			try:
-				#self.front_interface = self.front_box_strip.apply(lambda x : np.gradient(x, axis = 1))
-				print(self.front_box_strip.shape)
-				print(self.front_interface.shape)
-				
-					
-			except:
-				pass
+				f_v_scale, b_v_scale = vertical_scale
 
-		if method == 'grad2':
-			pass
+				def rollingmean(x):
+					rolling_mean = x.rolling(kwargs['rolling_mean'], center = True).mean()
+					# fill in nan caused by the .rolling (using min_period would create large gradients)
+					rolling_mean.fillna(method = 'ffill', inplace = True)
+					rolling_mean.fillna(method = 'bfill', inplace = True)
+					return rolling_mean
+
+				if method == 'grad':
+
+					def max_gradient(x):
+						rolling_mean = rollingmean(x)
+						return np.argmax(np.abs(np.gradient(rolling_mean)))
+
+					self.front_interface = f_v_scale[self.front_box_strip.apply(max_gradient, axis = 0)]
+					self.back_interface = b_v_scale[self.back_box_strip.apply(max_gradient, axis = 0)]
+
+
+					# filter the interface using the median of the 19 values around it
+					self.front_interface = pd.Series(medfilt(self.front_interface, kernel_size= kwargs['median_filter']))
+					self.back_interface = pd.Series(medfilt(self.back_interface, kernel_size= kwargs['median_filter']))
+
+					# smooth out with a rolling_mean
+					self.front_interface = self.front_interface.rolling(25, center = True, min_periods=1).mean()
+					self.back_interface = self.back_interface.rolling(25, center = True, min_periods=1).mean()
+				
+				else:
+					horizontal_average = self.front_box_strip.mean(axis = 1)
+					#print(horizontal_average.shape)
+					def max_gradient_second_order(x):
+						rolling_mean = rollingmean(x)
+						return np.argmax(np.gradient(np.gradient(rolling_mean)))
+
+					def min_gradient_second_order(x):
+						rolling_mean = rollingmean(x)
+						return np.argmin(np.gradient(np.gradient(rolling_mean)))
+					
+					self.front_interface = pd.Series(f_v_scale[max_gradient_second_order(horizontal_average)]* np.ones(self.front_box_strip.shape[1]))
+					#self.front_interface = pd.Series(f_v_scale[self.front_box_strip.apply(max_gradient_second_order, axis = 0)])
+					self.back_interface = pd.Series(b_v_scale[self.back_box_strip.apply(min_gradient_second_order, axis = 0)])
+
+				
+			except KeyError as e:
+				print('grad method requires' + str(e) + 'kwarg')
+
+
 		if method == 'canny':
 			pass
 
@@ -654,7 +699,7 @@ def plot_density_transient(df , door, time, save_loc, steadystate = 500, number_
 		ax1.set_title('Box strip')
 		
 		ax1.set_ylabel('h/H')
-		ax1.set_xlabel('$I/I_0$')	
+		ax1.set_xlabel('$A$')	
 		ax1.legend()
 
 		# plot door	
@@ -665,7 +710,7 @@ def plot_density_transient(df , door, time, save_loc, steadystate = 500, number_
 		ax2.set_title('Door strip')
 		
 		ax2.set_ylabel('h/H')
-		ax2.set_xlabel('$I/I_0$')	
+		ax2.set_xlabel('$A$')	
 		ax2.legend()
 
 
@@ -681,7 +726,7 @@ def plot_density(img, door, theory_df):
 	img - class RAW_img instance
 	door - level of the door scale on the front of the box
 	theory_df - dataframe with the theory  steadystate interface height'''
-
+	plot_width = 3
 	if not os.path.exists(img.img_loc + 'analysis/single_density_profiles'):
 		os.mkdir(img.img_loc + 'analysis/single_density_profiles')
 	
@@ -692,16 +737,16 @@ def plot_density(img, door, theory_df):
 		ax1.fill_betweenx(img.front_rho.index, img.front_rho[img.time, l, 'mean']  + 2*img.front_rho[ img.time, l, 'std'], 
 		img.front_rho[ img.time, l, 'mean'] - 2*img.front_rho[ img.time, l, 'std'], alpha = 0.2)
 
-	ax1.plot([0,1],[img.front_interface.mean(), img.front_interface.mean()], label = 'interface height', ls = '--')
-	ax1.fill_between( [0,1], img.front_interface.mean() + 2*img.front_interface.std(), img.front_interface.mean() - 2*img.front_interface.std(), alpha = 0.2)
-	ax1.set_xlim( [0, 1] )
+	ax1.plot([0,plot_width],[img.front_interface.mean(), img.front_interface.mean()], label = 'interface height', ls = '--')
+	ax1.fill_between( [0,plot_width], img.front_interface.mean() + 2*img.front_interface.std(), img.front_interface.mean() - 2*img.front_interface.std(), alpha = 0.2)
+	ax1.set_xlim( [0, plot_width] )
 	ax1.set_ylim( [0, max(img.front_rho.index)] )
 	ax1.set_title('Uncalibrated density profiles')
 	ax1.set_ylabel('h/H')
-	ax1.set_xlabel('$I/I_0$')	
-	ax1.plot([0,1], [door['front'], door['front']], label = 'door_level', color = 'r')
+	ax1.set_xlabel('$A$')	
+	ax1.plot([0,plot_width], [door['front'], door['front']], label = 'door_level', color = 'r')
 	theory_interface = theory_df.loc[img.bottom_opening_diameter, img.side_opening_height]
-	ax1.plot([0,1], [theory_interface, theory_interface], label = 'steady state', ls = '--')
+	ax1.plot([0,plot_width], [theory_interface, theory_interface], label = 'steady state', ls = '--')
 	ax1.legend()
 
 	#find the closest index to the door in pixels so that it can be plotted on the image
@@ -713,9 +758,9 @@ def plot_density(img, door, theory_df):
 
 	ax2.plot([0, len(img.front_door_strip.columns)+ len(img.front_box_strip.columns)], [door_idx, door_idx], label = 'door_level', color = 'r')
 	ax2.plot( np.arange(len(img.front_interface)) + img.front_door_strip.shape[1], interface_idx, label  = 'interface height', color = 'green' )
-	plt.text( len(img.front_door_strip.columns)/2 , len(img.front_door_strip.index)/2 , 'door strip', color = 'k', rotation = 90)
-	plt.text( len(img.front_door_strip.columns)+len(img.front_box_strip.columns)/2 , len(img.front_box_strip.index)/2 , 'box strip', color = 'k', rotation = 90)
-	ax2.plot( [len(img.front_door_strip.columns), len(img.front_door_strip.columns)] , [0, len(img.front_box_strip.index)] , color = 'k' )
+	plt.text( len(img.front_door_strip.columns)/2 , len(img.front_door_strip.index)/2 , 'door strip', color = 'r', rotation = 90)
+	plt.text( len(img.front_door_strip.columns)+len(img.front_box_strip.columns)/2 , len(img.front_box_strip.index)/2 , 'box strip', color = 'r', rotation = 90)
+	ax2.plot( [len(img.front_door_strip.columns), len(img.front_door_strip.columns)] , [0, len(img.front_box_strip.index)] , color = 'r' )
 	image = ax2.imshow( pd.concat( [img.front_door_strip, img.front_box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno', vmin = 0, vmax = 1)
 	plt.colorbar(image,ax = ax2, orientation = 'vertical')
 	ax2.legend()
@@ -765,7 +810,7 @@ def plot_density_compare_scales(rel_data_dir, data, door, theory_df, exp_condito
 	ax1.set_ylim( [0, max(data[0].index.tolist() + data[1].index.tolist())] )
 	ax1.set_title('Uncalibrated transmittance profiles')
 	ax1.set_ylabel('h/H')
-	ax1.set_xlabel('$I/I_0$')	
+	ax1.set_xlabel('$A$')	
 
 	theory_interface = theory_df.loc[exp_conditons['bod'], exp_conditons['soh']]
 	ax1.plot([0,1], [theory_interface, theory_interface], label = 'steady state', ls = ':', lw = 2 , color = 'black')

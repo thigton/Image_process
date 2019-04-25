@@ -5,10 +5,21 @@ import PLOT
 import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
+import time
 #-------------------------------------------#
 
 
 if __name__ == '__main__':
+
+    # OPTIONS [0 = NO. 1 = YES]
+    SAVE = 0
+    DENSITY_PROFILES = 1
+    INTERFACE_HEIGHT = 1
+    PLOT_DATA = 1
+    TIME = 1
+
+    if TIME == 1:
+        tic = time.time()
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
@@ -41,14 +52,13 @@ if __name__ == '__main__':
 
         #----------------------------------------------------------------
 
-        # OPTIONS [0 = NO. 1 = YES]
-        SAVE = 0
-        DENSITY_PROFILES = 1
-        INTERFACE_HEIGHT = 1
-        PLOT_DATA = 1
 
-        count = 0
-        for f in filenames: # Analyse in reverse so that the crop images are of the steady state
+        if TIME ==1:
+            
+            print(str(time.time()-tic) + 'sec for background images')
+            tic = time.time()
+
+        for count, f in enumerate(filenames): # Analyse in reverse so that the crop images are of the steady state
             # Image preprocessing ========================
 
              # import image
@@ -82,6 +92,10 @@ if __name__ == '__main__':
 
             # Image analysis ============================
 
+            if TIME == 1:
+                print(str(time.time()-tic) + 'sec to normalise image')
+                tic = time.time()
+
             # split into a door strip and a box strip
             if count == 0:
                 # define the door level , box top and bottom returns a dict
@@ -98,7 +112,7 @@ if __name__ == '__main__':
                 try:
                     with open(rel_imgs_dir + 'analysis_area.pickle', 'rb') as pickle_in:
                         analysis_area = pickle.load(pickle_in)
-                    
+
                 except FileNotFoundError as e:
                         img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
                         img1.crop_img(crop_pos)
@@ -122,8 +136,9 @@ if __name__ == '__main__':
                 door_scale = scales[1]
                 vertical_scale = scales[2]
                 horizontal_scale = scales[3]   
-
-
+                if TIME == 1:
+                    print(str(time.time()-tic) + 'sec to load in pickles')
+                    tic = time.time()
 
             # Define crop 
             if count ==  len(filenames)-1:
@@ -132,6 +147,9 @@ if __name__ == '__main__':
             else:
                 img.define_analysis_strips(analysis_area, vertical_scale,  door_strip_width = 200)
             
+            if TIME == 1:
+                print(str(time.time()-tic) + 'sec to define analysis strips')
+                tic = time.time()
             # get 1d density distribution
 
             if DENSITY_PROFILES == 1:
@@ -146,6 +164,10 @@ if __name__ == '__main__':
                     # Add to dataframe
                     df_front_rho = pd.concat([df_front_rho,img.front_rho], axis = 1)
                     df_back_rho = pd.concat([df_back_rho,img.back_rho], axis = 1)
+            if TIME == 1:
+
+                print(str(time.time()-tic) + 'sec to get analyse the density')
+                tic = time.time()
 
             # get the interface position
             if INTERFACE_HEIGHT == 1:
@@ -162,9 +184,16 @@ if __name__ == '__main__':
                 else:
                     df_front_interface = pd.concat([df_front_interface, img.front_interface], axis = 1)
                     df_back_interface = pd.concat([df_back_interface, img.back_interface], axis = 1)
-            
+            if TIME == 1:
+                print(str(time.time()-tic) + 'sec to analyse the interface height')
+                tic = time.time()                
+
             if PLOT_DATA == 1:
                 RAW_img.plot_density(img, door_scale, theory_df)
+
+            if TIME == 1:
+                print(str(time.time()-tic) + 'sec to plot the data')
+                tic = time.time()
 
             # save cropped red image
             if SAVE == 1:

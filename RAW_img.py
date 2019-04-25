@@ -14,7 +14,7 @@ import matplotlib.gridspec as gridspec
 import sys
 import csv
 from scipy.signal import medfilt
-
+import itertools
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
 
@@ -330,11 +330,24 @@ class Raw_img():
 		def transmit_to_absorb(df):
 			'''convert the element in the dataframe from Transmittance to Absorbance using the beer lambert law'''
 			return df.applymap(lambda x : 0-np.log(x))
+		front_scale = pd.Series(vertical_scale[0] , name = 'h/H')
+		back_scale = pd.Series(vertical_scale[1] , name = 'h/H')
+		analysis_array = transmit_to_absorb(pd.DataFrame(getattr(self, channel)[y1:y2, x1:+width]))
 
-		self.front_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[0] , name = 'h/H')) )
-		self.back_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H')) )
-		self.front_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H')) )
-		self.back_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H')) )
+		for 
+		self.front_door_strip = analysis_array[ [x for x in range(x2-x1)] ]
+		self.front_door_strip.set_index(front_scale, inplace = True)
+		self.back_door_strip = analysis_array[ [x for x in range(x2-x1)] ]
+		self.back_door_strip.set_index(back_scale, inplace = True)
+
+		self.front_box_strip = analysis_array[ [x for x in range(x2-x1, width-x1)] ]
+		self.front_box_strip.set_index(front_scale, inplace = True)
+		self.back_box_strip = analysis_array[ [x for x in range(x2-x1, width-x1)] ]
+		self.back_box_strip.set_index(back_scale, inplace = True)
+		print(self.front_door_strip)
+		# self.back_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H')) )
+		# self.front_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H')) )
+		# self.back_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H')) )
 		
 
 
@@ -761,9 +774,11 @@ def plot_density(img, door, theory_df):
 	plt.text( len(img.front_door_strip.columns)/2 , len(img.front_door_strip.index)/2 , 'door strip', color = 'r', rotation = 90)
 	plt.text( len(img.front_door_strip.columns)+len(img.front_box_strip.columns)/2 , len(img.front_box_strip.index)/2 , 'box strip', color = 'r', rotation = 90)
 	ax2.plot( [len(img.front_door_strip.columns), len(img.front_door_strip.columns)] , [0, len(img.front_box_strip.index)] , color = 'r' )
-	image = ax2.imshow( pd.concat( [img.front_door_strip, img.front_box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno', vmin = 0, vmax = 1)
+	image = ax2.imshow( pd.concat( [img.front_door_strip, img.front_box_strip], axis = 1 ), aspect = 'auto', cmap = 'inferno', vmin = 0, vmax = plot_width)
 	plt.colorbar(image,ax = ax2, orientation = 'vertical')
-	ax2.legend()
+	legend = ax2.legend()
+	legend.get_frame().set_facecolor('white')
+
 	ax2.set_ylim( [len(img.front_rho.index), 0 ] )
 	ax2.set_title('Processed Image')
 	ax2.axis('off')

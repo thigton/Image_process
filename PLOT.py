@@ -138,7 +138,7 @@ if __name__ == '__main__':
         try:
             # read in the dataframes
             data = {}
-            for df in ['front_rho','back_rho','front_interface','back_interface','scales']:
+            for df in ['density','interface_height','scales']:
                 with open(rel_data_dir + df + '.pickle', 'rb') as pickle_in:
                     data[df] = pickle.load(pickle_in) 
             door_scale = data['scales'][1]
@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
         else:
             # time is a list of the time each image was taken.
-            time = sorted( { int(x) for x in data['front_rho'].columns.get_level_values(0) } )
+            time = sorted( { int(x) for x in data['density']['front'].columns.get_level_values(0) } )
             # append the experiement conditons to the main dictionary
             exp_conditions[exp] = experiment_conditions_as_dict(exp)
 
@@ -157,13 +157,13 @@ if __name__ == '__main__':
 #                RAW_img.plot_density_compare_scales(rel_data_dir, data_for_plot, door_scale,theory_df, exp_conditions[exp])
 #                
             
-            time_ss = steadystate(data['front_rho'], time, exp)
+            time_ss = steadystate(data['density']['front'], time, exp)
             
 
             # create timeaverage plot
-            time_average[exp] = timeaverage(data['front_rho'], time, time_ss, exp) # time averaged density profiles
+            time_average[exp] = timeaverage(data['density']['front'], time, time_ss, exp) # time averaged density profiles
             
             # Create transient plot
-            RAW_img.plot_density_transient(data['front_rho'], door_scale, time, save_loc = rel_data_dir, steadystate = time_ss)
+            RAW_img.plot_density_transient(data['density']['front'], door_scale, time, save_loc = rel_data_dir, steadystate = time_ss)
             
     plot_timeaverage(time_average, exp_conditions, door_scale, theory_df)

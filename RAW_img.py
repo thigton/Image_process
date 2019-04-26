@@ -330,24 +330,19 @@ class Raw_img():
 		def transmit_to_absorb(df):
 			'''convert the element in the dataframe from Transmittance to Absorbance using the beer lambert law'''
 			return df.applymap(lambda x : 0-np.log(x))
-		front_scale = pd.Series(vertical_scale[0] , name = 'h/H')
-		back_scale = pd.Series(vertical_scale[1] , name = 'h/H')
+
+		# convert analysis area to Absorbance
 		analysis_array = transmit_to_absorb(pd.DataFrame(getattr(self, channel)[y1:y2, x1:+width]))
 
-		for 
-		self.front_door_strip = analysis_array[ [x for x in range(x2-x1)] ]
-		self.front_door_strip.set_index(front_scale, inplace = True)
-		self.back_door_strip = analysis_array[ [x for x in range(x2-x1)] ]
-		self.back_door_strip.set_index(back_scale, inplace = True)
+		# Split into analysis areas based on front and back scale and the two strips
+		front_scale = pd.Series(vertical_scale[0] , name = 'h/H')
+		back_scale = pd.Series(vertical_scale[1] , name = 'h/H')
+		for scale , strip in itertools.product(['front', 'back'], ['box', 'door']):
+			use_scale = back_scale if scale == 'back' else front_scale
+			range_tup = (x2-x1, width-x1) if strip == 'box' else (0, x2-x1)
+			setattr(self, scale + '_' + strip + '_strip' , analysis_array[ [x for x in range(range_tup[0], range_tup[1])] ] )
+			getattr(self, scale + '_' + strip + '_strip').set_index(use_scale, inplace = True)
 
-		self.front_box_strip = analysis_array[ [x for x in range(x2-x1, width-x1)] ]
-		self.front_box_strip.set_index(front_scale, inplace = True)
-		self.back_box_strip = analysis_array[ [x for x in range(x2-x1, width-x1)] ]
-		self.back_box_strip.set_index(back_scale, inplace = True)
-		print(self.front_door_strip)
-		# self.back_door_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x1:x2], index = pd.Series(vertical_scale[1] , name = 'h/H')) )
-		# self.front_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[0] , name = 'h/H')) )
-		# self.back_box_strip = transmit_to_absorb(pd.DataFrame( getattr(self, channel)[y1:y2, x2:x1+width] , index = pd.Series(vertical_scale[1] , name = 'h/H')) )
 		
 
 

@@ -14,14 +14,14 @@ if __name__ == '__main__':
     # OPTIONS [0 = NO. 1 = YES]
     SAVE = 0
     DENSITY_PROFILES = 1
-    INTERFACE_HEIGHT = 1
-    PLOT_DATA = 1
+    INTEßRFACE_HEIGHT = 1
+    PLOT_DATA = 0
     TIME = 1
 
     if TIME == 1:
         tic = time.time()
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
-    theory_df = PLOT.import_theory() # import the theory steady state dataframe
+    #theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
     # Chose Parameters
     data_loc = ['190328']#, '190328_3' ,'190329','190405','190405_2', '190405_3']
@@ -188,8 +188,8 @@ if __name__ == '__main__':
                 print(str(time.time()-tic) + 'sec to analyse the interface height')
                 tic = time.time()                
 
-            if PLOT_DATA == 1:
-                RAW_img.plot_density(img, door_scale, theory_df)
+            # if PLOT_DATA == 1:
+                # RAW_img.plot_density(img, door_scale, theory_df)
 
             if TIME == 1:
                 print(str(time.time()-tic) + 'sec to plot the data')

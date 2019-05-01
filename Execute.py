@@ -19,7 +19,7 @@ if __name__ == '__main__':
     interface_height_methods = ['threshold', 'grad']
     interface_height_methods_to_plot = 'grad'
     # [1 = YES , 0 = NO]
-    SAVE = 0
+    SAVE = 1
     PLOT_DATA = 1
     TIME = 0
 
@@ -28,8 +28,8 @@ if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
-    # Chose Parameters
-    data_loc = ['190328']#, '190328_3' ,'190329','190405','190405_2', '190405_3']
+    
+    data_loc = ['190328_3' , '190329','190405','190405_2', '190405_3'] #'190328'
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
@@ -145,25 +145,16 @@ if __name__ == '__main__':
                     print(str(time.time()-tic) + 'sec to load in pickles')
                     tic = time.time()
 
-
-
-
             # Define crop 
-
             if count ==  len(filenames)-1:
                 # Save analysis area for last image
-                img.define_analysis_strips(analysis_area, vertical_scale, door_strip_width = 200, save = True)
+                img.define_analysis_strips(analysis_area, vertical_scale, save = True, door_strip_width = 200)
             else:
                 img.define_analysis_strips(analysis_area, vertical_scale,  door_strip_width = 200)
-
-                
 
             if TIME == 1:
                 print(str(time.time()-tic) + 'sec to define analysis strips')
                 tic = time.time()
-            
-            
-            
             
             # get 1d density distribution
             if DENSITY_PROFILES == 1:
@@ -179,14 +170,19 @@ if __name__ == '__main__':
                     # Add to dataframe
                     for scale in ['front','back']:
                         density[scale] = pd.concat([ density[scale], getattr(img, scale + '_rho') ], axis = 1)
-
+                # once the data has been passed into the df, remove the top level time from attribute for later plotting bugs
+                for scale in ['front','back']:
+                    setattr(img, scale + '_rho', getattr(img, scale +'_rho')[img.time])
             else: # load in pickle
                 try:
                     if count == 0:
                         with open(rel_imgs_dir + 'analysis/density.pickle', 'rb') as pickle_in:
                             density = pickle.load(pickle_in)
-                            for scale in ['front', 'back']:
-                                setattr(img, scale + '_rho', density[scale])
+
+                    for scale in ['front', 'back']:
+                        # get the right 4 columns but it is missing top level of index
+                        setattr(img, scale + '_rho', pd.DataFrame(density[scale][img.time]))
+
                 except FileNotFoundError as e:
                     print('Pickle files don''t exist, need to create by changing DENSITY PROFILES = 1')
                     
@@ -213,14 +209,20 @@ if __name__ == '__main__':
                 else:
                     for scale in ['front','back']:
                         interface_height[scale] = pd.concat([ interface_height[scale], getattr(img, scale + '_interface') ], axis = 1)
+                # once the data has been passed into the df, remove the top level time from attribute for later plotting bugs
+                for scale in ['front','back']:
+                    setattr(img, scale + '_interface', getattr(img, scale +'_interface')[img.time])
+
             else: # load in pickle
 
                 try:
                     if count == 0:
                         with open(rel_imgs_dir + 'analysis/interface_height.pickle', 'rb') as pickle_in:
                             interface_height = pickle.load(pickle_in)
-                            for scale in ['front','back']:
-                                setattr(img, scale + '_interface', interface_height[scale])
+
+                    for scale in ['front','back']:
+                        setattr(img, scale + '_interface', interface_height[scale][img.time])
+
                 except FileNotFoundError as e:
                     print('Pickle files don''t exist, need to create by changing INTERFACE_HEIGHT = 1')
 
@@ -253,9 +255,6 @@ if __name__ == '__main__':
             print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed in folder: ' + data + 
             ' - folder ' + str(data_loc.index(data) +1) + ' of ' + str(len(data_loc)) )
     
-
-
-
 
         # Write dataframes to pickle
         for df, df_str in zip([density, interface_height], ['density','interface_height']):

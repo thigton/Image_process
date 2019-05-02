@@ -123,30 +123,34 @@ class Raw_img():
 
 
 	
-	def save_histogram(self, metadata, crop = True):
+	def save_histogram(self, metadata, crop = True, plume = False):
 		"""Creates and saves a histogram of the image to the same folder as the image"""
 		try:
+
 			colors = ['red','green','blue']
-			hist_col = [[1, 0, 0],[0, 1, 0],[0, 0, 1]]
-			fig = plt.figure()
+			hist_col = [(1, 0, 0),(0, 1, 0),(0, 0, 1)]
+			fig = plt.figure(figsize = (12,12))
 			bits = int(metadata['BitsPerSample'])
+
 			for C in colors:
 				ax = fig.add_subplot(3,1,colors.index(C)+1)
 				print('Plotting ' + C + ' channel')
-				if crop == False:
-					if not os.path.exists(self.img_loc + self.ext + '/raw_hist/'):
-						os.makedirs(self.img_loc + self.ext + '/raw_hist/')
-
-					ax.hist(getattr(self,'raw_' + C).reshape(-1), bins = (2**bits) , range=(0, 2**bits+1), color = hist_col[colors.index(C)])
-					hist_name = self.img_loc + self.ext + '/raw_hist/' + self.filename + '.png'
-
-				else:
-					
+				if crop == True:
 					if not os.path.exists(self.img_loc + self.ext + '/hist/'):
 						os.makedirs(self.img_loc + self.ext + '/hist/')
 
-					ax.hist(getattr(self,C).reshape(-1), bins = (2**bits), range=(0, 2**bits+1), color = hist_col[colors.index(C)])
+					ax.hist(getattr(self,C).reshape(-1), bins = 2**bits / 5, range=(0, 2**bits +1), color = hist_col[colors.index(C)])
 					hist_name = self.img_loc + self.ext + '/hist/' + self.filename + '.png'
+
+				else:
+					if not os.path.exists(self.img_loc + self.ext + '/raw_hist/'):
+						os.makedirs(self.img_loc + self.ext + '/raw_hist/')
+
+					ax.hist(getattr(self,'raw_' + C).reshape(-1), bins = 2**bits / 5 , range=(0, 2**bits +1), color = hist_col[colors.index(C)])
+					hist_name = self.img_loc + self.ext + '/raw_hist/' + self.filename + '.png'
+
+					
+
 				plt.title(C)
 				# Save Histogram				
 			fig.savefig(hist_name)
@@ -274,7 +278,7 @@ class Raw_img():
 	def undistort(self):
 		self.status['undistorted'] = True
 
-	def normalise(self, bg_img, choose_norm_scale = False):
+	def normalise(self, bg_img):
 		'''method will subtract a background image from a the class instance.  
 		Subtraction only happens on the full images
 		bg_img = np.array of rgb channels, same size as the images'''
@@ -293,7 +297,6 @@ class Raw_img():
 		self.red = np.divide(self.red , bg_img[0])
 		self.green = np.divide(self.green , bg_img[1])
 		self.blue = np.divide(self.blue , bg_img[2])
-		
 		# housekeeping
 		self.status['normalised'] = True
 
@@ -544,7 +547,9 @@ def prep_background_imgs(bg_imgs):
         crop_pos = bg_imgs[0].choose_crop()
         with open(bg_imgs[0].img_loc + 'initial_crop_area.pickle', 'wb') as pickle_out:
             pickle.dump(crop_pos, pickle_out)
-	
+    else:
+    	with open(bg_imgs[0].img_loc + 'initial_crop_area.pickle', 'rb') as pickle_in:
+    		crop_pos = pickle.load(pickle_in)
     for img in bg_imgs:
         img.crop_img(crop_pos) #crop images
 

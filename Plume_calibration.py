@@ -9,8 +9,15 @@ def plume_time_ave(img, count, **kwargs):
     '''function will add new image to existing 
     set of averaged images and find the new time_average of the images'''
     def save_plume_img(df, img):
+        fig = plt.figure(figsize=(8,12))
+        image = plt.imshow(df, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
+        plt.colorbar(image, orientation = 'vertical')
+        plt.axis('off')
         fname = f'{img.img_loc}analysis/plume_time_ave/{str(img.time)}_secs.png'
-        plt.imsave(fname, df, vmin = 0, vmax = 1, cmap = 'inferno', dpi = 100)
+        fig.savefig(fname)
+        plt.close()
+
+        # plt.imsave(fname, df, vmin = kwargs['thres'][0], vmax = kwargs['thres'][1], cmap = 'viridis', dpi = 100)
 
     try:
         ave = kwargs['img_ave']
@@ -26,11 +33,20 @@ def plume_time_ave(img, count, **kwargs):
         return img.plume
 
 
-
-
-
-
-
+def plume_area_hist(img, **kwargs):
+    '''saves a histogram of the plume area to see what the
+    spread is and how you might want to rescale it.'''
+    if not os.path.exists(img.img_loc +  'analysis/hist/'):
+        os.makedirs(img.img_loc +  'analysis/hist/')
+    fig, (ax1,ax2) = plt.subplots(1,2,figsize = (12,12))
+    ax1.hist(img.plume.to_numpy().reshape(-1), bins =50 , range=(0, 1))
+    hist_name = img.img_loc +'analysis/hist/' + img.filename + 'plume_area.png'
+    ax1.set_title('Plume area Histogram - red channel')
+    ax1.set_ylim([0,1000])
+    image = ax2.imshow(img.plume, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
+    plt.colorbar(image,ax = ax2, orientation = 'vertical')
+    fig.savefig(hist_name)
+    plt.close()
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
@@ -42,14 +58,12 @@ if __name__ == '__main__':
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
         file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
-
         # Get list of file names
         file_ids = RAW_img.get_image_fid(rel_imgs_dir, file_ext)
         filenames = file_ids[file_ext]
         # Get background images
         BG_ids = RAW_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
         BG_filenames = BG_ids[file_ext]
-
         #crop background imgs and get crop_pos
         (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
         
@@ -106,10 +120,14 @@ if __name__ == '__main__':
             vertical_scale = plume_scales[2]
             img.define_analysis_strips(plume_area, vertical_scale, plume = True)
 
+            plume_absorbance_thres = (0.04, 0.25) # this is the range of absorbance to get a good image of the plume
+            plume_area_hist(img, thres = plume_absorbance_thres)
             if count == 0:
-                image_time_ave = plume_time_ave(img, count)
+                image_time_ave = plume_time_ave(img, count, thres = plume_absorbance_thres )
             else:
-                image_time_ave = plume_time_ave(img, count, img_ave = image_time_ave)
+                image_time_ave = plume_time_ave(img, count, img_ave = image_time_ave, thres = plume_absorbance_thres)
                 
                 
-            # time average all the images
+            # housekeeping
+            print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed in folder: ' + data + 
+            ' - folder ' + str(data_loc.index(data) +1) + ' of ' + str(len(data_loc)) )

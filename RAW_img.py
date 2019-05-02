@@ -366,7 +366,7 @@ class Raw_img():
 				plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
 				plt.close()
 
-		if kwargs['plume']:
+		if 'plume' in kwargs:
 			self.plume = analysis_array
 			self.plume.set_index(front_scale, inplace = True)
 			

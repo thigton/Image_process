@@ -29,7 +29,7 @@ if __name__ == '__main__':
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
     
-    data_loc = ['190328_3' , '190329','190405','190405_2', '190405_3'] #'190328'
+    data_loc = ['190328' , '190329','190405','190405_2', '190405_3'] #'190328'
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
@@ -76,7 +76,6 @@ if __name__ == '__main__':
                 img.get_time()
                 t0 = img.time # intial time
             img.get_time(t0)
-
 
             # realign
 

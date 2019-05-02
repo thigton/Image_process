@@ -4,11 +4,14 @@ import PLOT
 import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
+from matplotlib.lines import Line2D 
 
 def plume_time_ave(img, count, **kwargs):
     '''function will add new image to existing 
     set of averaged images and find the new time_average of the images'''
     def save_plume_img(df, img):
+        if not os.path.exists(img.img_loc + 'analysis/plume_time_ave/'):
+            os.makedirs(img.img_loc + 'analysis/plume_time_ave/')
         fig = plt.figure(figsize=(8,12))
         image = plt.imshow(df, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
         plt.colorbar(image, orientation = 'vertical')
@@ -21,11 +24,10 @@ def plume_time_ave(img, count, **kwargs):
 
     try:
         ave = kwargs['img_ave']
-        if not os.path.exists(img.img_loc + 'analysis/plume_time_ave/'):
-            os.makedirs(img.img_loc + 'analysis/plume_time_ave/')
         ave *= count
         ave += img.plume
         ave /= (count + 1)
+
         save_plume_img(ave,img)
         return ave
     except KeyError:
@@ -48,11 +50,42 @@ def plume_area_hist(img, **kwargs):
     fig.savefig(hist_name)
     plt.close()
 
+def analyse_plume(img_ave, **kwargs):
+    '''Input - time_ave of the plume density images
+    Produces a plot of the plume centre line and gaussian distributions'''
+ 
+  
+    plume_cl = img_ave.rolling(25, center = True, min_periods = 1, axis = 0).mean().idxmax(axis = 1)
+    plume_cl_0 = plume_cl.iloc[0]
+
+    # plume_cl = img_ave.idxmax(axis = 1)
+
+
+    plt.figure(figsize=(8,12))
+    image = plt.imshow(img_ave, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
+    plt.plot(plume_cl.rolling(25, center = True, min_periods = 1).mean(),range(len(plume_cl)), color = 'green')
+    plt.plot([plume_cl_0]*2 ,[0, len(plume_cl)], color = 'green', ls = '--' )
+    plt.colorbar(image, orientation = 'vertical')
+    plt.axis('on')
+    plt.show()
+    # fname = f'{img.img_loc}analysis/plume_time_ave/{str(img.time)}_secs.png'
+    # fig.savefig(fname)
+    plt.close()
+
+
+
+
 if __name__ == '__main__':
+
+    # OPTIONS
+    GOT_PLUME_TIME_AVE = 1
+    
+
+    #CODE
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
-    data_loc = ['190328']#, '190328_3' , '190329','190405','190405_2', '190405_3'] 
+    data_loc = ['190405_2']#, '190328_3' , '190329','190405','190405_2', '190405_3'] 
 
     for data in data_loc:
         
@@ -68,6 +101,18 @@ if __name__ == '__main__':
         (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
         
         #----------------------------------------------------------------
+        plume_absorbance_thres = (0.0, 0.15) # this is the range of absorbance to get a good image of the plume
+        
+        if GOT_PLUME_TIME_AVE == 1:
+            try:
+                with open(rel_imgs_dir + 'analysis/plume_time_ave/plume_time_ave.pickle', 'rb') as pickle_in:
+                    image_time_ave = pickle.load(pickle_in)
+
+                analyse_plume(image_time_ave,thres = plume_absorbance_thres)
+                exit()
+            except FileNotFoundError:
+                    print('Need to create plume_time_ave first.')
+
 
         for count, f in enumerate(filenames): # Analyse in reverse so that the crop images are of the steady state
             # Image preprocessing ========================
@@ -84,6 +129,7 @@ if __name__ == '__main__':
             img.crop_img(crop_pos)
             #normalise images
             img.normalise(BG) 
+
             # Plume analysis ============================
             # define the door level , box top and bottom returns a dict
             try:
@@ -96,7 +142,7 @@ if __name__ == '__main__':
             # define and pickle the plume crop (initially based on the the theory steady state level)
             try:
                 with open(rel_imgs_dir + 'plume_area.pickle', 'rb') as pickle_in:
-                   plume_area = pickle.load(pickle_in)
+                    plume_area = pickle.load(pickle_in)
             except FileNotFoundError as e:
                     img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
                     img1.crop_img(crop_pos)
@@ -104,8 +150,7 @@ if __name__ == '__main__':
                     print('Choose plume area...')
                     plume_area = img1.choose_crop()
                     with open(rel_imgs_dir + 'plume_area.pickle', 'wb') as pickle_out:
-                        pickle.dump(plume_area, pickle_out)                    
-   
+                        pickle.dump(plume_area, pickle_out)                                   
 
             # get the scales of analysis area in dimensionless form for both the front and back of the box.
             # Door level, vertical and horizontal scale, camera centre.
@@ -118,16 +163,27 @@ if __name__ == '__main__':
                     pickle.dump(plume_scales, pickle_out) 
     
             vertical_scale = plume_scales[2]
+
+            
             img.define_analysis_strips(plume_area, vertical_scale, plume = True)
 
-            plume_absorbance_thres = (0.04, 0.25) # this is the range of absorbance to get a good image of the plume
+            
+            
             plume_area_hist(img, thres = plume_absorbance_thres)
             if count == 0:
                 image_time_ave = plume_time_ave(img, count, thres = plume_absorbance_thres )
+            elif count == len(filenames) - 1:
+                image_time_ave = plume_time_ave(img, count, img_ave = image_time_ave, thres = plume_absorbance_thres)
+                with open(rel_imgs_dir + 'analysis/plume_time_ave/plume_time_ave.pickle','wb') as pickle_out:
+                    pickle.dump(image_time_ave, pickle_out)
             else:
                 image_time_ave = plume_time_ave(img, count, img_ave = image_time_ave, thres = plume_absorbance_thres)
-                
+
+            
+               
                 
             # housekeeping
             print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed in folder: ' + data + 
             ' - folder ' + str(data_loc.index(data) +1) + ' of ' + str(len(data_loc)) )
+        
+ 

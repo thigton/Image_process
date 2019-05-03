@@ -239,13 +239,14 @@ class Raw_img():
 					os.makedirs(self.img_loc + self.ext + '/raw_' + channel + '_channel/')
 				# save image
 				plt_name = self.img_loc + self.ext + '/raw' + channel + '_channel/' + self.filename + '.png'
-				plt.imsave(plt_name,getattr(self, 'raw_' + channel), cmap = colormap)
+				plt.imsave(plt_name,getattr(self, 'raw_' + channel), cmap = colormap, vmin = 0, vmax = 1)
 			else:
 				if not os.path.exists(self.img_loc + self.ext + '/' + channel + '_channel/'):
 					os.makedirs(self.img_loc + self.ext + '/' + channel + '_channel/')
 				# save image
+
 				plt_name = self.img_loc + self.ext + '/' + channel + '_channel/' + self.filename + '.png'
-				plt.imsave(plt_name,getattr(self, channel), cmap = colormap, vmin = 0, vmax = 1)
+				plt.imsave(plt_name,0 - getattr(self, channel), cmap = colormap, vmin = -1, vmax = 0)
 
 	def convert_centre_pixel_coordinate(self,crop_pos):
 		'''returns the new coordinates of the centre point of the image based on the crop in crop_pos'''
@@ -297,6 +298,7 @@ class Raw_img():
 		self.red = np.divide(self.red , bg_img[0])
 		self.green = np.divide(self.green , bg_img[1])
 		self.blue = np.divide(self.blue , bg_img[2])
+
 		# housekeeping
 		self.status['normalised'] = True
 

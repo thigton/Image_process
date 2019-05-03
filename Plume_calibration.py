@@ -2,9 +2,11 @@ import os
 import RAW_img
 import PLOT
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from matplotlib.lines import Line2D 
+from lmfit.models import GaussianModel
 
 def plume_time_ave(img, count, **kwargs):
     '''function will add new image to existing 
@@ -53,13 +55,33 @@ def plume_area_hist(img, **kwargs):
 def analyse_plume(img_ave, **kwargs):
     '''Input - time_ave of the plume density images
     Produces a plot of the plume centre line and gaussian distributions'''
- 
-  
+    # find plume centre line (max absorbance)
     plume_cl = img_ave.rolling(25, center = True, min_periods = 1, axis = 0).mean().idxmax(axis = 1)
+    # position of centre line at the nozzle
     plume_cl_0 = plume_cl.iloc[0]
 
-    # plume_cl = img_ave.idxmax(axis = 1)
+    x_range = np.arange(200,1000)
+    rows = np.arange(100, 950, 125)
+    colors = ['red','blue','green','black','orange','yellow','purple']
+    colors = colors[:len(rows)]
 
+    plt.figure(figsize=(8,12))
+    for row, color in zip(rows, colors):
+        # print()
+        data = img_ave.iloc[row,  x_range]
+
+        plt.scatter(x_range[::10], data[::10],marker = 'x', color = color, 
+        label = f'h/H: {img_ave.iloc[row].name:.2f}')
+ 
+        mod = GaussianModel()
+        pars = mod.guess(data, x=x_range) # guesses starting value for gaussian
+        out = mod.fit(data, pars, x=x_range) # finds best fit of gaussian
+        print(out.fit_report(min_correl=0.25))
+        plt.plot(x_range, out.best_fit, color = color, ls = '--')
+        # exit()
+    plt.legend()
+    plt.show()
+    plt.close()
 
     plt.figure(figsize=(8,12))
     image = plt.imshow(img_ave, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
@@ -71,7 +93,7 @@ def analyse_plume(img_ave, **kwargs):
     # fname = f'{img.img_loc}analysis/plume_time_ave/{str(img.time)}_secs.png'
     # fig.savefig(fname)
     plt.close()
-
+    exit()
 
 
 

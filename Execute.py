@@ -14,13 +14,13 @@ if __name__ == '__main__':
     #pylint: disable=no-member
 
     # OPTIONS [1 = Create New Dataframe. 0 = Load in existing Dataframe]
-    DENSITY_PROFILES = 1
-    INTERFACE_HEIGHT = 1
+    DENSITY_PROFILES = 0
+    INTERFACE_HEIGHT = 0
     interface_height_methods = ['threshold', 'grad']
     interface_height_methods_to_plot = 'grad'
     # [1 = YES , 0 = NO]
     SAVE = 1
-    PLOT_DATA = 1
+    PLOT_DATA = 0
     TIME = 0
 
     if TIME == 1:

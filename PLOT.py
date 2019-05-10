@@ -153,8 +153,7 @@ def compare_timeaverage(rho_dict, h_dict,  exp_conditions, door, theory_df):
     plot_width = 1.0
     for v in rho_dict.values():
         plot_width = v['mean'].max()*1.25 if v['mean'].max() > plot_width else plot_width
-        print(plot_width)
-        exit()
+
     for (k,v) , h, c in zip(rho_dict.items(), h_dict.values() ,colors[:len(rho_dict.keys())]):
         #density profile
         ax1.plot(v['mean'], v['mean'].index.values, label = 'Bot: ' + str(exp_conditions[k]['bod']) 
@@ -181,7 +180,7 @@ def compare_timeaverage(rho_dict, h_dict,  exp_conditions, door, theory_df):
 #####################################################################
 
 if __name__ == '__main__':
-    data_loc = ['190405']#,'190405_2', '190405_3']
+    data_loc = ['190328','190328_3','190329']#,'190405_2', '190405_3']
     exp_conditions = {} # dictionary for all the experiement parameters to compare
     rho_time_ave = {} # empty dictionary for the time averaged data to be sit in and be compared
     h_time_ave = {}

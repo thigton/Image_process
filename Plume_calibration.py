@@ -14,10 +14,12 @@ def plume_time_ave(img, count, **kwargs):
     def save_plume_img(df, img):
         if not os.path.exists(img.img_loc + 'analysis/plume_time_ave/'):
             os.makedirs(img.img_loc + 'analysis/plume_time_ave/')
-        fig = plt.figure(figsize=(8,12))
-        image = plt.imshow(df, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
-        plt.colorbar(image, orientation = 'vertical')
-        plt.axis('off')
+        fig = plt.figure(figsize=(12,8))
+        ax1 = fig.add_subplot(111)
+        cbaxes = fig.add_axes([0.9, 0.1275, 0.03, 0.74]) 
+        image = ax1.imshow(df, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
+        plt.colorbar(image, cax = cbaxes, orientation = 'vertical')
+        ax1.axis('off')
         fname = f'{img.img_loc}analysis/plume_time_ave/{str(img.time)}_secs.png'
         fig.savefig(fname)
         plt.close()
@@ -52,48 +54,51 @@ def plume_area_hist(img, **kwargs):
     fig.savefig(hist_name)
     plt.close()
 
-def analyse_plume(img_ave, **kwargs):
+def analyse_plume(img_ave, rel_imgs_dir, **kwargs):
     '''Input - time_ave of the plume density images
     Produces a plot of the plume centre line and gaussian distributions'''
     # find plume centre line (max absorbance)
     plume_cl = img_ave.rolling(25, center = True, min_periods = 1, axis = 0).mean().idxmax(axis = 1)
+
     # position of centre line at the nozzle
     plume_cl_0 = plume_cl.iloc[0]
 
-    x_range = np.arange(200,1000)
-    rows = np.arange(100, 950, 125)
+    fig, (ax1,ax2) = plt.subplots(2, 1, figsize = (9, 9))
+    x_range = [500,1500]
+    rows = np.arange(150,img_ave.shape[0]-100, 125)
     colors = ['red','blue','green','black','orange','yellow','purple']
-    colors = colors[:len(rows)]
-
-    plt.figure(figsize=(8,12))
     for row, color in zip(rows, colors):
-        # print()
-        data = img_ave.iloc[row,  x_range]
-
-        plt.scatter(x_range[::10], data[::10],marker = 'x', color = color, 
-        label = f'h/H: {img_ave.iloc[row].name:.2f}')
- 
-        mod = GaussianModel()
-        pars = mod.guess(data, x=x_range) # guesses starting value for gaussian
-        out = mod.fit(data, pars, x=x_range) # finds best fit of gaussian
-        print(out.fit_report(min_correl=0.25))
-        plt.plot(x_range, out.best_fit, color = color, ls = '--')
+        data = img_ave.iloc[row,:]
+        # print(img_ave.columns.values)
         # exit()
-    plt.legend()
-    plt.show()
-    plt.close()
+        ax1.scatter(img_ave.columns[::25], data[::25],marker = 'x', color = color, 
+        label = f'h/H: {img_ave.iloc[row].name:.2f}')
+        mod = GaussianModel()
+        pars = mod.guess(data, x=img_ave.columns.values) # guesses starting value for gaussian
 
-    plt.figure(figsize=(8,12))
-    image = plt.imshow(img_ave, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
-    plt.plot(plume_cl.rolling(25, center = True, min_periods = 1).mean(),range(len(plume_cl)), color = 'green')
-    plt.plot([plume_cl_0]*2 ,[0, len(plume_cl)], color = 'green', ls = '--' )
-    plt.colorbar(image, orientation = 'vertical')
-    plt.axis('on')
-    plt.show()
-    # fname = f'{img.img_loc}analysis/plume_time_ave/{str(img.time)}_secs.png'
-    # fig.savefig(fname)
+        out = mod.fit(data, pars, x=img_ave.columns.values) # finds best fit of gaussian
+        # print(out.fit_report(min_correl=0.25))
+        ax1.plot(img_ave.columns.values, out.best_fit, color = color, ls = '--')
+    ax1.legend()
+    ax1.set_xlim(x_range)
+    ax1.set_xlabel('pixels')
+    ax1.set_ylabel('Absorbance')
+    ax1.set_title('Gaussian Fit to plume concentration')
+
+    image = ax2.imshow(img_ave, cmap = 'inferno', vmin = kwargs['thres'][0] , vmax = kwargs['thres'][1])
+    ax2.plot(plume_cl.rolling(25, center = True, min_periods = 1).mean(),range(len(plume_cl)), color = 'green', label = 'max concentration')
+    ax2.plot([plume_cl_0]*2 ,[0, len(plume_cl)], color = 'green', ls = '--', label = 'plume origin centreline' )
+    for row in rows:
+        ax2.plot([0, img_ave.shape[1]], [row, row], color = 'red', lw = 2)
+    plt.colorbar(image,ax = ax2, orientation = 'vertical')
+    ax2.axis('on')
+    ax2.legend()
+    ax2.set_title('Time Averaged Plume')
+    fname = f'{rel_imgs_dir}analysis/plume.png'
+    fig.savefig(fname)
     plt.close()
-    exit()
+    
+
 
 
 
@@ -107,11 +112,13 @@ if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
-    data_loc = ['190405_2']#, '190328_3' , '190329','190405','190405_2', '190405_3'] 
+    # data_loc = ['190405','190405_2']
+    data_loc = ['190328','190328_3' ,'190329','190405','190405_2', '190405_3'] 
 
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
+        print(rel_imgs_dir)
         file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
         # Get list of file names
         file_ids = RAW_img.get_image_fid(rel_imgs_dir, file_ext)
@@ -124,19 +131,18 @@ if __name__ == '__main__':
         
         #----------------------------------------------------------------
         plume_absorbance_thres = (0.0, 0.15) # this is the range of absorbance to get a good image of the plume
-        
         if GOT_PLUME_TIME_AVE == 1:
             try:
                 with open(rel_imgs_dir + 'analysis/plume_time_ave/plume_time_ave.pickle', 'rb') as pickle_in:
                     image_time_ave = pickle.load(pickle_in)
-
-                analyse_plume(image_time_ave,thres = plume_absorbance_thres)
-                exit()
+                analyse_plume(image_time_ave,rel_imgs_dir, thres = plume_absorbance_thres)
+                continue
             except FileNotFoundError:
                     print('Need to create plume_time_ave first.')
 
-
         for count, f in enumerate(filenames): # Analyse in reverse so that the crop images are of the steady state
+
+
             # Image preprocessing ========================
              # import image
             img = RAW_img.Raw_img(rel_imgs_dir, f, file_ext)

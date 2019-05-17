@@ -1,4 +1,5 @@
-
+# idea of the file is to test on an image which is in the middle of the experiemtn
+# so that you 'should' havse some stable data
 import os
 import RAW_img
 import PLOT
@@ -7,29 +8,24 @@ import matplotlib.pyplot as plt
 import pickle
 import time
 import itertools
-#-------------------------------------------#
-
 
 if __name__ == '__main__':
     #pylint: disable=no-member
 
     # OPTIONS [1 = Create New Dataframe. 0 = Load in existing Dataframe]
-    DENSITY_PROFILES = 0
+    DENSITY_PROFILES = 1
     INTERFACE_HEIGHT = 1
-    interface_height_methods = ['threshold', 'grad','grad2']
-    interface_height_methods_to_plot = 'grad2'
+    interface_height_methods = ['grad2']
+    # interface_height_methods_to_plot = 'grad'
     # [1 = YES , 0 = NO]
-    SAVE = 1
-    PLOT_DATA = 1
-    TIME = 0
 
-    if TIME == 1:
-        tic = time.time()
+
+
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
     theory_df = PLOT.import_theory() # import the theory steady state dataframe
 
     
-    data_loc = ['190328', '190329','190405','190405_2', '190405_3'] #'190328'
+    data_loc = ['190328']# , '190329','190405','190405_2', '190405_3'] #'190328'
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
@@ -45,25 +41,12 @@ if __name__ == '__main__':
         BG_ids = RAW_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
         BG_filenames = BG_ids[file_ext]
 
-        ## Check histogram of background image
-        #img_b = RAW_img.Raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], file_ext)
-        #metadata = img_b.get_metadata()
-        #img_b.save_histogram(metadata, crop = False)
-        #exit()
-
         #crop background imgs and get crop_pos  
         (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
 
 
         #----------------------------------------------------------------
-
-
-        if TIME ==1:
-            
-            print(str(time.time()-tic) + 'sec for background images')
-            tic = time.time()
-
-        for count, f in enumerate(filenames): # Analyse in reverse so that the crop images are of the steady state
+        for count, f in enumerate(filenames[int((len(filenames)-1)/2):]): # Analyse in reverse so that the crop images are of the steady state
             # Image preprocessing ========================
 
              # import image
@@ -99,9 +82,6 @@ if __name__ == '__main__':
 
             # Image analysis ============================
 
-            if TIME == 1:
-                print(str(time.time()-tic) + 'sec to normalise image')
-                tic = time.time()
 
             # split into a door strip and a box strip
             if count == 0:
@@ -143,10 +123,6 @@ if __name__ == '__main__':
                 door_scale = scales[1]
                 vertical_scale = scales[2]
                 horizontal_scale = scales[3]   
-                if TIME == 1:
-                    print(str(time.time()-tic) + 'sec to load in pickles')
-                    tic = time.time()
-
             # Define crop 
             if count ==  len(filenames)-1:
                 # Save analysis area for last image
@@ -154,9 +130,6 @@ if __name__ == '__main__':
             else:
                 img.define_analysis_strips(analysis_area, vertical_scale,  door_strip_width = 200)
 
-            if TIME == 1:
-                print(str(time.time()-tic) + 'sec to define analysis strips')
-                tic = time.time()
             
             # get 1d density distributioos.chdir
             if DENSITY_PROFILES == 1:
@@ -190,9 +163,7 @@ if __name__ == '__main__':
                     print('Pickle files don''t exist, need to create by changing DENSITY PROFILES = 1')
                     
             
-            if TIME == 1:
-                print(str(time.time()-tic) + 'sec to analyse the density')
-                tic = time.time()
+
 
 
 
@@ -200,71 +171,10 @@ if __name__ == '__main__':
 
 
             # get the interface position
-            if INTERFACE_HEIGHT == 1:
-                img.interface_height(vertical_scale,centre, methods = interface_height_methods, thres_val = 0.85, rolling_mean = 75, median_filter = 19)
-                if count == 0:
-                    try:
-                        interface_height = {}
-                        for scale in ['front','back']:
-                            interface_height[scale] = pd.DataFrame(getattr(img, scale + '_interface'))
-                    except AttributeError as e:
-                        print('img.interface doesn''t exist, check that eveything works on the .interface_height method')
-                else:
-                    for scale in ['front','back']:
-                        interface_height[scale] = pd.concat([ interface_height[scale], getattr(img, scale + '_interface') ], axis = 1)
-                # once the data has been passed into the df, remove the top level time from attribute for later plotting bugs
-                for scale in ['front','back']:
-                    setattr(img, scale + '_interface', getattr(img, scale +'_interface')[img.time])
-
-            else: # load in pickle
-
-                try:
-                    if count == 0:
-                        with open(rel_imgs_dir + 'analysis/interface_height.pickle', 'rb') as pickle_in:
-                            interface_height = pickle.load(pickle_in)
-
-                    for scale in ['front','back']:
-                        setattr(img, scale + '_interface', interface_height[scale][img.time])
-
-                except FileNotFoundError as e:
-                    print('Pickle files don''t exist, need to create by changing INTERFACE_HEIGHT = 1')
-
-
-            if TIME == 1:
-                print(str(time.time()-tic) + 'sec to analyse the interface height')
-                tic = time.time()                
-
-
-
-
-
-            if PLOT_DATA == 1:
-                RAW_img.plot_density(img, door_scale, theory_df, interface = interface_height_methods_to_plot )
-
-            if TIME == 1:
-                print(str(time.time()-tic) + 'sec to plot the data')
-                tic = time.time()
-
-
-
-
-
-
-            # save cropped red image
-            if SAVE == 1:
-                img.disp_img(disp = False, crop= True, save = True, channel = 'red')
-
-            # housekeeping
-            print( str(count+1) + ' of ' + str(len(filenames)) + ' images processed in folder: ' + data + 
+           
+            img.interface_height(vertical_scale,centre, methods = interface_height_methods, thres_val = 0.85, rolling_mean = 75, median_filter = 19)
+               
+               
+         # housekeeping
+            print( str(count+1) + ' of ' + str((len(filenames)-1)/2) + ' images processed in folder: ' + data + 
             ' - folder ' + str(data_loc.index(data) +1) + ' of ' + str(len(data_loc)) )
-    
-
-        # Write dataframes to pickle
-        for df, df_str in zip([density, interface_height], ['density','interface_height']):
-            fname = rel_imgs_dir + 'analysis/' + df_str + '.pickle'
-            with open(fname, 'wb') as pickle_out:
-                pickle.dump(df, pickle_out) 
-
-
- 
-

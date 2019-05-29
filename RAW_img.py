@@ -16,6 +16,8 @@ import csv
 from scipy.signal import medfilt
 import itertools
 import pickle
+
+
 """---------------------------------------------------------------------------------------------------------------------------------------------------"""
 #pylint: disable=no-member
 class Raw_img():
@@ -44,16 +46,18 @@ class Raw_img():
 		self.filename = filename
 		self.ext = ext[1:]
 
-
-
 		if ext == '.ARW':
-			x = rawpy.imread(self.file_path) # raw file is imported using rawpy
-			self.raw_image = x.raw_image
-			x.close()
+
+			with rawpy.imread(self.file_path) as x:
+				x = rawpy.imread(self.file_path) # raw file is imported using rawpy
+				pars = rawpy.Params(demosaic_algorithm = 0, half_size = True,  four_color_rgb=False, output_bps = 16)
+				self.raw_image = x.postprocess(pars)
+
 		elif ext == '.JPG':
 			self.raw_image = mpimg.imread(os.path.join(os.path.dirname(self.file_path), filename + ext))
+
 		# Split into rgb channels
-		self.rgb_channels(ext)
+		self.rgb_channels()
 		# Get sizes 
 		self.get_size()
 
@@ -103,19 +107,13 @@ class Raw_img():
 		self.height = self.raw_image.shape[0]
 
 
-	def rgb_channels(self,ext = '.ARW'):
+	def rgb_channels(self):
 		
 		""" Create Red, Green and Blue Arrays
 		ext = str. file extension default is raw file, can also have .JPG """
-		if ext == '.ARW':
-			self.raw_red = self.raw_image[::2, ::2]
-			self.raw_green = np.array( ( (self.raw_image[::2,1::2] + self.raw_image[1::2, ::2] ) / 2).round(), dtype = np.uint16)
-			self.raw_blue = self.raw_image[1::2,1::2]
-		
-		elif ext == '.JPG':
-			self.raw_red = self.raw_image[:,:,0]
-			self.raw_green = self.raw_image[:,:,1]
-			self.raw_blue = self.raw_image[:,:,2]
+		self.raw_red = self.raw_image[:,:,0]
+		self.raw_green = self.raw_image[:,:,1]
+		self.raw_blue = self.raw_image[:,:,2]
 		#print('self.red (' + str(self.red.shape) + ' self.green ' + str(self.green.shape)  
 		#+' self.blue ' + str(self.blue.shape) +' successfully created')
 
@@ -129,8 +127,8 @@ class Raw_img():
 			colors = ['red','green','blue'] #,'green'
 			hist_col = [(1, 0, 0),(0, 1, 0),(0, 0, 1)]
 			fig = plt.figure(figsize = (12,12))
-			bits = int(metadata['BitsPerSample'])
-
+			# bits = int(metadata['BitsPerSample'])
+			bits = 16
 			for C in colors:
 				ax = fig.add_subplot(3,1,colors.index(C)+1)
 				print('Plotting ' + C + ' channel')
@@ -138,16 +136,16 @@ class Raw_img():
 					if not os.path.exists(self.img_loc + self.ext + '/hist/'):
 						os.makedirs(self.img_loc + self.ext + '/hist/')
 
-					ax.hist(getattr(self,C).reshape(-1), bins = 2**bits / 5, range=(0, 2**bits +1), color = hist_col[colors.index(C)])
+					ax.hist(getattr(self,C).reshape(-1), bins = round(2**bits / 5), range=(0, 2**bits +1), color = hist_col[colors.index(C)])
 					hist_name = self.img_loc + self.ext + '/hist/' + self.filename + '.png'
-
+					ax.set_ylim([0, 10000])
 				else:
 					if not os.path.exists(self.img_loc + self.ext + '/raw_hist/'):
 						os.makedirs(self.img_loc + self.ext + '/raw_hist/')
 
-					ax.hist(getattr(self,'raw_' + C).reshape(-1), bins = 2**bits / 5 , range=(0, 2**bits +1), color = hist_col[colors.index(C)])
+					ax.hist(getattr(self,'raw_' + C).reshape(-1), bins = round(2**bits / 5) , range=(0, 2**bits +1), color = hist_col[colors.index(C)])
 					hist_name = self.img_loc + self.ext + '/raw_hist/' + self.filename + '.png'
-
+					ax.set_ylim([0, 10000])
 				plt.title(C)
 				# Save Histogram				
 			fig.savefig(hist_name)
@@ -289,15 +287,16 @@ class Raw_img():
 			sys.exit('Image has already been normalised')
 		if self.status['cropped'] == False:
 			sys.exit('You should crop the image before normalising')
-		if (self.status['black_level'] == False) and (self.ext == 'ARW') :
-			sys.exit('You should offset the by the black level before normalising')
-		
+	
 		# divide by the background image
 
 		self.red = np.divide(self.red , bg_img[0])
 		self.green = np.divide(self.green , bg_img[1])
 		self.blue = np.divide(self.blue , bg_img[2])
 
+		self.red[self.red > 1] = 1
+		self.green[self.green > 1] = 1
+		self.blue[self.blue > 1] = 1
 		# housekeeping
 		self.status['normalised'] = True
 
@@ -336,8 +335,6 @@ class Raw_img():
 
 		# convert analysis area to Absorbance
 		analysis_array = transmit_to_absorb(pd.DataFrame(getattr(self, channel)[y1:y2, x1:x1+width]))
-
-		
 		# Split into analysis areas based on front and back scale and the two strips
 		front_scale = pd.Series(vertical_scale[0] , name = 'h/H')
 		back_scale = pd.Series(vertical_scale[1] , name = 'h/H')
@@ -584,13 +581,13 @@ def background_img_mean(bg_imgs):
 
 def prep_background_imgs(bg_imgs):
     '''Calls the functions above to apply to the list of backgrounnd images''' 
-    if not os.path.isfile(bg_imgs[0].img_loc + 'initial_crop_area.pickle'): # if csv file doesn't exist
+    if not os.path.isfile(bg_imgs[0].img_loc + bg_imgs[0].ext + '_initial_crop_area.pickle'): # if csv file doesn't exist
         print('Choose crop for base image')
         crop_pos = bg_imgs[0].choose_crop()
-        with open(bg_imgs[0].img_loc + 'initial_crop_area.pickle', 'wb') as pickle_out:
+        with open(bg_imgs[0].img_loc + bg_imgs[0].ext + '_initial_crop_area.pickle', 'wb') as pickle_out:
             pickle.dump(crop_pos, pickle_out)
     else:
-    	with open(bg_imgs[0].img_loc + 'initial_crop_area.pickle', 'rb') as pickle_in:
+    	with open(bg_imgs[0].img_loc + bg_imgs[0].ext + '_initial_crop_area.pickle', 'rb') as pickle_in:
     		crop_pos = pickle.load(pickle_in)
     for img in bg_imgs:
         img.crop_img(crop_pos) #crop images
@@ -606,7 +603,10 @@ def box_dims(img): # cant just apply to the analysis space as you can't see the
 	# Show an image in interactive mode
 	plt.ion()
 	ax = plt.axes()
-	ax.imshow(img.image)
+	# print(np.iinfo(img.image.dtype))
+	x = (img.image.astype(np.float64) / 2**16) * 2**8
+	img_x = x.astype(np.uint8)
+	ax.imshow(img_x)
 
 	# get a door level
 	response = 'no'

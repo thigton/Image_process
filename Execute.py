@@ -1,8 +1,8 @@
-
 import os
 import RAW_img
 import PLOT
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import time
@@ -14,10 +14,11 @@ if __name__ == '__main__':
     #pylint: disable=no-member
 
     # OPTIONS [1 = Create New Dataframe. 0 = Load in existing Dataframe]
-    DENSITY_PROFILES = 0
+    DENSITY_PROFILES = 1
     INTERFACE_HEIGHT = 1
     interface_height_methods = ['threshold', 'grad','grad2']
     interface_height_methods_to_plot = 'grad2'
+    file_ext = '.ARW' 
     # [1 = YES , 0 = NO]
     SAVE = 1
     PLOT_DATA = 1
@@ -33,27 +34,24 @@ if __name__ == '__main__':
     for data in data_loc:
         
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
-        file_ext = '.JPG' # JPG is working ARW gets error but this might be because I corrupted all the data using git control
-
+        
 
         # Get list of file names
         file_ids = RAW_img.get_image_fid(rel_imgs_dir, file_ext)
         filenames = file_ids[file_ext]
 
-
         # Get background images
         BG_ids = RAW_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
         BG_filenames = BG_ids[file_ext]
 
-        ## Check histogram of background image
-        #img_b = RAW_img.Raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], file_ext)
-        #metadata = img_b.get_metadata()
-        #img_b.save_histogram(metadata, crop = False)
-        #exit()
+        # Check histogram of background image
+        # img_b = RAW_img.Raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], file_ext)
+        # metadata = img_b.get_metadata()
+        # img_b.save_histogram(metadata, crop = False)
+        # exit()
 
         #crop background imgs and get crop_pos  
         (BG, crop_pos) = RAW_img.prep_background_imgs([RAW_img.Raw_img(rel_imgs_dir + 'BG/', f, file_ext) for f in BG_filenames])
-
 
         #----------------------------------------------------------------
 
@@ -84,15 +82,10 @@ if __name__ == '__main__':
              #crop image
             img.crop_img(crop_pos)
 
-            # black offset
-            if file_ext == '.ARW':
-                img.black_offset(metadata)
-
-
-
             #normalise images
             img.normalise(BG) 
 
+            
             # convert pixels to a real life scale
 
             # dye calibration
@@ -107,17 +100,17 @@ if __name__ == '__main__':
             if count == 0:
                 # define the door level , box top and bottom returns a dict
                 try:
-                    with open(rel_imgs_dir + 'box_dims.pickle', 'rb') as pickle_in:
+                    with open(rel_imgs_dir + file_ext[1:] + '_box_dims.pickle', 'rb') as pickle_in:
                         box_dims = pickle.load(pickle_in)
 
                 except FileNotFoundError as e:
                     box_dims = RAW_img.box_dims(img) 
-                    with open(rel_imgs_dir + 'box_dims.pickle', 'wb') as pickle_out:
+                    with open(rel_imgs_dir + file_ext[1:] + '_box_dims.pickle', 'wb') as pickle_out:
                         pickle.dump(box_dims, pickle_out)
                     
 
                 try:
-                    with open(rel_imgs_dir + 'analysis_area.pickle', 'rb') as pickle_in:
+                    with open(rel_imgs_dir + file_ext[1:] + '_analysis_area.pickle', 'rb') as pickle_in:
                         analysis_area = pickle.load(pickle_in)
 
                 except FileNotFoundError as e:
@@ -125,17 +118,17 @@ if __name__ == '__main__':
                         img1.crop_img(crop_pos)
                         print('Choose analysis area... \n Ensure the top and bottom are within the depth of the box')
                         analysis_area = img1.choose_crop()
-                        with open(rel_imgs_dir + 'analysis_area.pickle', 'wb') as pickle_out:
+                        with open(rel_imgs_dir + file_ext[1:] + '_analysis_area.pickle', 'wb') as pickle_out:
                             pickle.dump(analysis_area, pickle_out)                 
 
                 # get the scales of analysis area in dimensionless form for both the front and back of the box.
                 # Door level, vertical and horizontal scale, camera centre.
                 try:
-                    with open(rel_imgs_dir + 'analysis/scales.pickle', 'rb') as pickle_in:
+                    with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_scales.pickle', 'rb') as pickle_in:
                         scales = pickle.load(pickle_in)
                 except (FileNotFoundError) as e:
                     scales = RAW_img.make_dimensionless(img,box_dims,analysis_area)
-                    with open(rel_imgs_dir + 'analysis/scales.pickle', 'wb') as pickle_out:
+                    with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_scales.pickle', 'wb') as pickle_out:
                         pickle.dump(scales, pickle_out) 
 
                 # unpack the tuple
@@ -179,7 +172,7 @@ if __name__ == '__main__':
             else: # load in pickle
                 try:
                     if count == 0:
-                        with open(rel_imgs_dir + 'analysis/density.pickle', 'rb') as pickle_in:
+                        with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_density.pickle', 'rb') as pickle_in:
                             density = pickle.load(pickle_in)
 
                     for scale in ['front', 'back']:
@@ -220,7 +213,7 @@ if __name__ == '__main__':
 
                 try:
                     if count == 0:
-                        with open(rel_imgs_dir + 'analysis/interface_height.pickle', 'rb') as pickle_in:
+                        with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_interface_height.pickle', 'rb') as pickle_in:
                             interface_height = pickle.load(pickle_in)
 
                     for scale in ['front','back']:
@@ -261,7 +254,7 @@ if __name__ == '__main__':
 
         # Write dataframes to pickle
         for df, df_str in zip([density, interface_height], ['density','interface_height']):
-            fname = rel_imgs_dir + 'analysis/' + df_str + '.pickle'
+            fname = rel_imgs_dir + 'analysis/' + file_ext[1:] + '_' + df_str + '.pickle'
             with open(fname, 'wb') as pickle_out:
                 pickle.dump(df, pickle_out) 
 

@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
             # define and pickle the plume crop (initially based on the the theory steady state level)
             try:
-                with open(rel_imgs_dir + 'plume_area.pickle', 'rb') as pickle_in:
+                with open(rel_imgs_dir + file_ext[1:] + '_plume_area.pickle', 'rb') as pickle_in:
                     plume_area = pickle.load(pickle_in)
             except FileNotFoundError as e:
                     img1 = RAW_img.Raw_img(rel_imgs_dir, filenames[-1], file_ext) 
@@ -121,17 +121,17 @@ if __name__ == '__main__':
                     # img1.normalise(BG) 
                     print('Choose plume area...')
                     plume_area = img1.choose_crop()
-                    with open(rel_imgs_dir + 'plume_area.pickle', 'wb') as pickle_out:
+                    with open(rel_imgs_dir + file_ext[1:] + '_plume_area.pickle', 'wb') as pickle_out:
                         pickle.dump(plume_area, pickle_out)                                   
 
             # get the scales of analysis area in dimensionless form for both the front and back of the box.
             # Door level, vertical and horizontal scale, camera centre.
             try:
-                with open(rel_imgs_dir + 'analysis/plume_scales.pickle', 'rb') as pickle_in:
+                with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_plume_scales.pickle', 'rb') as pickle_in:
                     plume_scales = pickle.load(pickle_in)
             except FileNotFoundError:
                 plume_scales = RAW_img.make_dimensionless(img,box_dims,plume_area)
-                with open(rel_imgs_dir + 'analysis/plume_scales.pickle', 'wb') as pickle_out:
+                with open(rel_imgs_dir + 'analysis/' + file_ext[1:] + '_plume_scales.pickle', 'wb') as pickle_out:
                     pickle.dump(plume_scales, pickle_out) 
     
             vertical_scale = plume_scales[2]

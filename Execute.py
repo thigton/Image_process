@@ -120,7 +120,7 @@ if __name__ == '__main__':
                         analysis_area = img1.choose_crop()
                         with open(rel_imgs_dir + file_ext[1:] + '_analysis_area.pickle', 'wb') as pickle_out:
                             pickle.dump(analysis_area, pickle_out)                 
-
+                        del(img1)
                 # get the scales of analysis area in dimensionless form for both the front and back of the box.
                 # Door level, vertical and horizontal scale, camera centre.
                 try:
@@ -151,7 +151,7 @@ if __name__ == '__main__':
                 print(str(time.time()-tic) + 'sec to define analysis strips')
                 tic = time.time()
             
-            # get 1d density distributioos.chdir
+            # get 1d density distributions
             if DENSITY_PROFILES == 1:
                
                 # get one d density profiles

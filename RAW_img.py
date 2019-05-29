@@ -46,14 +46,14 @@ class Raw_img():
 		self.filename = filename
 		self.ext = ext[1:]
 
-		if ext == '.ARW':
+		if ext.upper() == '.ARW':
 
 			with rawpy.imread(self.file_path) as x:
 				x = rawpy.imread(self.file_path) # raw file is imported using rawpy
 				pars = rawpy.Params(demosaic_algorithm = 0, half_size = True,  four_color_rgb=False, output_bps = 16)
 				self.raw_image = x.postprocess(pars)
 
-		elif ext == '.JPG':
+		elif ext.upper() == '.JPG':
 			self.raw_image = mpimg.imread(os.path.join(os.path.dirname(self.file_path), filename + ext))
 
 		# Split into rgb channels
@@ -93,12 +93,13 @@ class Raw_img():
 					self.bottom_opening_diameter = int(row[3])
 					self.side_opening_height = int(row[4])
 					self.sol_no = row[5]
+					self.plume_q = int(row[11])
 
 		with open('Data/solution.csv','r') as csvfile:
 		 	reader = csv.reader(csvfile, delimiter = ',')
 		 	for row in reader:
 				 if row[0] == self.sol_no:
-					 self.sol_denisty = float(row[5])
+					 self.sol_denisty = float(row[9])
 		
 
 	def get_size(self):
@@ -513,18 +514,18 @@ class Raw_img():
 					for (maxx, minn) in zip(idx_max,idx_min):
 						# change the if statements based on whether it is the front or back we are looking at.
 						idx = (maxx, minn) if scale == 'front' else (minn,maxx)
-						if (vertical_scale[i][idx[0]] > centre_scale.loc[scale,'vertical']): # maxx -> front and minn -> back
+						if (vertical_scale[i][idx[0]] >= centre_scale.loc[scale,'vertical']): # maxx -> front and minn -> back
 							interface.append(vertical_scale[i][idx[0]])
 							# getattr(self, f'{scale}_interface')[self.time]['grad2'].iloc[j] = vertical_scale[i][idx[0]]
 							# print(getattr(self, f'{scale}_interface')[self.time]['grad2'].head())
 
-						elif vertical_scale[i][idx[1]] < centre_scale.loc[scale,'vertical']: # minn -> front and maxx -> back
+						elif vertical_scale[i][idx[1]] <= centre_scale.loc[scale,'vertical']: # minn -> front and maxx -> back
 							interface.append(vertical_scale[i][idx[1]])
 							# getattr(self, f'{scale}_interface')[self.time]['grad2'].iloc[j].fillna(vertical_scale[i][idx[1]])
 
 					column_name = pd.MultiIndex.from_product([[self.time], ['grad2']], names = ['time','algo_method'])
-					final_interface = pd.DataFrame(data = interface, index = getattr(self, f'{scale}_box_strip').columns,
-					  columns = column_name)
+
+					final_interface = pd.DataFrame(data = interface, index = getattr(self, f'{scale}_box_strip').columns, columns = column_name)
 					getattr(self, f'{scale}_interface').update(final_interface)
 
 			except KeyError as e:
@@ -604,9 +605,12 @@ def box_dims(img): # cant just apply to the analysis space as you can't see the
 	plt.ion()
 	ax = plt.axes()
 	# print(np.iinfo(img.image.dtype))
-	x = (img.image.astype(np.float64) / 2**16) * 2**8
-	img_x = x.astype(np.uint8)
-	ax.imshow(img_x)
+	if img.ext == 'ARW':
+		x = (img.image.astype(np.float64) / 2**16) * 2**8
+		img_x = x.astype(np.uint8)
+		ax.imshow(img_x)
+	else:
+		ax.imshow(img.image)
 
 	# get a door level
 	response = 'no'
@@ -691,7 +695,7 @@ def make_dimensionless(img,box_dims,analysis_area):
 	door_level = pd.DataFrame(index = ['door'], columns= ['front','back'])
 	# door height scaled on the front and back
 	door_level.loc['door','front'] = front_vertical_scale[int(box_dims['door'] - box_dims['f_y1'])]
-	door_level.loc['door','back'] = back_vertical_scale[int( box_dims['door'] - box_dims['b_y1'])] 
+	door_level.loc['door','back'] = front_vertical_scale[int( box_dims['door'] - box_dims['f_y1'])] 
 
 	centre_position = pd.DataFrame(index = ['front','back'], columns= ['horizontal','vertical'])
 

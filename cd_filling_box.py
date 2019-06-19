@@ -54,17 +54,17 @@ if __name__ == '__main__':
     CAPTURE_FRAMES = 0
     DENSITY_PROFILES = 0
     INTERFACE_HEIGHT = 0
-    CHECK_SS = 0
+    CHECK_SS = 1
 
 
     S = 0.45 * 0.3 # bot horizontal cross sectional area m^2
 
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
 
-    video_loc = './Data/190617_5/'
+    video_loc = './Data/190619/'
     file_ext = '.jpg'
     fps = 50
-    time_between_img = 0.5 # seconds
+    time_between_img = 0.1 # seconds
     plume_absorbance_thres = (0.0, 0.15)
     # Not needed but saves changing the prep_background imgs func
     with open(f'{video_loc[:7]}cam_mtx.pickle', 'rb') as pickle_in:
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     if CAPTURE_FRAMES == 1:
         # create jpgs frames
         video_to_frames(video_loc, '00000.MTS', image_ext=file_ext, 
-                        video_fps=fps, spacing=time_between_img, start_time=15)
+                        video_fps=fps, spacing=time_between_img, start_time=0)
     
     # Get list of file names
     file_ids = raw_img.get_image_fid(video_loc, file_ext)

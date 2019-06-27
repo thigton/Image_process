@@ -43,7 +43,7 @@ def plume_time_ave(img, count, save=False, **kwargs):
             first_false = [i for i, x in enumerate(row_bools) if not x][0]
         except IndexError:
             first_false = img.plume.shape[0]
-        row_bools[(first_false - 40):] = False
+        row_bools[(first_false - 80):] = False
         edited_img = img.plume
         for bol, row in zip(row_bools, img.plume.index):
             # if the row_bool is true, do nothing (incude the row in the edited img to average)
@@ -92,11 +92,11 @@ if __name__ == '__main__':
 
 
 
-    # DATA_LOC = ['190521_3']
-    DATA_LOC = ['190405']# ,'190329','190405','190405_2', '190405_3']
+    DATA_LOC = ['190521_4']
+    # DATA_LOC = ['190405']# ,'190329','190405','190405_2', '190405_3']
     for data in DATA_LOC:
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
-        file_ext = '.ARW'
+        file_ext = '.jpg'
 
         # load in camera matrix
         with open(f'{rel_imgs_dir[:7]}cam_mtx.pickle', 'rb') as pickle_in:
@@ -123,7 +123,8 @@ if __name__ == '__main__':
                 metadata = IMG.get_metadata()
                 IMG.get_time()
                 t0 = IMG.time # intial time
-            IMG.get_time(t0)
+            else:
+                IMG.get_time(t0)
 
             if file_ext == '.ARW':
                 IMG.undistort(camera_params)

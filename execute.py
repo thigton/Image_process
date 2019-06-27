@@ -53,7 +53,7 @@ if __name__ == '__main__':
         #crop background imgs and get crop_pos
         (BG, crop_pos, box_dims) = raw_img.prep_background_imgs(
             [raw_img.raw_img(rel_imgs_dir + 'BG/',
-                             f, FILE_EXT) for f in BG_filenames], camera_params)
+                             f, FILE_EXT) for f in BG_filenames], undistort=camera_params)
 
         #----------------------------------------------------------------
 

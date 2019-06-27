@@ -93,14 +93,14 @@ class raw_img():
                     self.side_opening_height = int(row[4])
                     self.sol_no = row[5]
                     self.plume_q = int(row[11])
-                    if kwargs['get_g_ss']:
+                    if 'get_g_ss' in kwargs:
                         self.rho_ss = float(row[12])
 
         with open('Data/solution.csv', 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 if row[0] == self.sol_no:
-                    self.sol_denisty = float(row[9])
+                    self.sol_denisty = float(row[6])
 
     def get_size(self):
         """Get size of image"""
@@ -540,17 +540,15 @@ def get_image_fid(rel_imgs_dir, *img_ext):
     """Function to get a list of file IDs to import.
     rel_imgs_dir = string - relative file path to this script
     *img_ext = string - extensions you want to list the IDs of"""
-    try:
-        os.chdir(os.path.dirname(__file__))
-        os.chdir(rel_imgs_dir)
+    try:   
         fid = {}
         for exts in img_ext:
-            exts = '*.' + exts.split('.')[-1]
             values = []
-            for file in glob.glob(exts):
-                # remove the file extension
-                values.append(file.split('.')[0])
-                values.sort()
+            for file in os.listdir(rel_imgs_dir):
+                if file.endswith(exts):
+                    # remove the file extension
+                    values.append(file.split('.')[0])
+                    values.sort()
             fid[str(exts[1:])] = values
         return fid
     except NameError as error:

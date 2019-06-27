@@ -11,29 +11,34 @@ import pandas as pd
 import raw_img
 from plume_prelim import plume_time_ave
 from video_to_frames import video_to_frames
-
+from savepdf_tex import savepdf_tex
+import itertools
+import matplotlib.style as style
+from mpl_toolkits.mplot3d import Axes3D
 
 # --------------------------------------#
 
 def plot_filling_box_density(df, door, thres, video_loc):
 
     # max_grad = get_interface_max_gradient(df) 
+    fig = plt.figure()
     ax = plt.axes()
     tick_spacing = 40
-    colors = plt.pcolor(df, cmap='coolwarm')
-    plt.colorbar(colors, ax=ax, orientation='vertical', label=r'$-\ln(\frac{I}{I_0})$')
+    colors = plt.pcolor(df, cmap='coolwarm', rasterized=True)
+    plt.colorbar(colors, ax=ax, orientation='vertical', label=r'\$-\ln(\frac{I}{I_0})\$')
     ylabs = ["%.2f"%item for item in df.index.values[0::tick_spacing] ]
     xlabs = ["%.0f"%item for item in df.columns.values[0::tick_spacing] ]
     plt.yticks(np.arange(0.5, len(df.index), tick_spacing), ylabs)
     plt.xticks(np.arange(0.5, len(df.columns), tick_spacing), xlabs, rotation='vertical')
     CS = plt.contour(df, thres, colors='w')
     plt.clabel(CS, CS.levels[::1], inline=True)
-    door_idx = min(range(df.shape[0]), key=lambda i: abs(df.index[i]- door))
-    plt.plot([0, len(df.columns)], [door_idx, door_idx], color='r', label='door')
+    # door_idx = min(range(df.shape[0]), key=lambda i: abs(df.index[i]- door))
+    # plt.plot([0, len(df.columns)], [door_idx, door_idx], color='r', label='door')
     # plt.plot(max_grad.index.values / time_between_img, max_grad, color = 'g', label = 'max grad' )
     plt.xlabel('Time (s)')
-    plt.ylabel('h/H')
-    plt.legend(loc='upper left')
+    plt.ylabel(r'\$h/H\$')
+    # plt.legend(loc='upper left')
+    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_filling_box'.format(video_loc[7:-1]))
     plt.savefig(f'{video_loc}analysis/density.png', dpi=300)
     plt.close()
 
@@ -52,8 +57,6 @@ def get_threshold_contour(df, thres, const):
     cs = plt.contour(df, [thres])
     p = cs.collections[0].get_paths()[0]
     v = p.vertices
-
-
     t = v[:, 0]
     y = v[:, 1]
     y = np.fromiter((convert_vertices_to_df_index(k,df) for k in y), float)
@@ -69,16 +72,19 @@ def get_threshold_contour(df, thres, const):
 
 def plot_lin_regress(x, y, y_pred, details, video_loc):
     '''Plot a single linear regression'''
+    
     ent_coeff, v_origin, rms = details
-    v_origin *= 300
+    fig = plt.figure()
     plt.scatter(x[::20], y[::20], marker='+', label='data', color='k')
     plt.plot(x, y_pred, label='lin_reg', ls='--', color='k')
-    plt.xlabel('$time (s)$')
-    plt.ylabel('$(Distance from nozzle/m)^{-2/3}$')
+    plt.xlabel(r'\$time (s)\$')
+    plt.ylabel(r'\$h^{-2/3} (m^{-2/3})=\$')
     plt.grid(True)
-    plt.legend()
-    plt.title(f'alpha: {ent_coeff:.4f} \n virtual origin: {v_origin:.4f}mm \n RMS: {rms:.4f}')
+    plt.text(50,5,r"\$ \alpha_{G}=\$"+ ' {:.4f} \n'.format(ent_coeff)+
+                  r"\$z_v/H=\$"+ " {:.4f} \n".format(v_origin)+
+                  r"\$E_{RMS}=\$"+ " {:.4f}".format(rms))
     plt.savefig(f'{video_loc}analysis/lin_regress_rms_min.png')
+    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_lin_regress'.format(video_loc[7:-1]))
     plt.close()
 
 def get_ent_coeff(m, S, F):
@@ -88,70 +94,110 @@ def get_ent_coeff(m, S, F):
     alpha = (m / cm)**(0.75)
     return alpha
 
-def ent_coeff_and_v_origin(df, thres, const, **kwargs):
-    S, plume_F = const
-    t, y = get_threshold_contour(df, thres, const)
+def ent_coeff_and_v_origin(df, thres, v_origin, time, y, **kwargs):
     # Linear regression for a variety of virtual_origins
-    t = np.array(t).reshape((-1, 1))
-    v_origins = np.linspace(0, 0.05, 150)
-    rms = []
-    ent_coeff = []
-    for v_origin in v_origins:
-        y_full = list(map(lambda k: ((k + v_origin) * 0.3)**(-0.6666), y))
-        lm = LinearRegression()
+    time = np.array(time).reshape((-1, 1))
+    y_full = list(map(lambda k: ((k + v_origin) * 0.3)**(-0.6666), y))
+    lm = LinearRegression()
+    try:
+        lm.fit(time, np.array(y_full))
+    except ValueError as e:
+        print(e)
+        plt.plot(time, y_full)
+        plt.show()
+        exit()
+    y_pred = lm.predict(time)
+    m = lm.coef_
+    ent_coeff = get_ent_coeff(m, S, plume_F)[0]
+    rms = sqrt(mean_squared_error(y_full, y_pred))
+
+    if 'plot_regression' in kwargs:
         try:
-            lm.fit(t, np.array(y_full))
-        except ValueError as e:
-            print(e)
-            plt.plot(t, y_full)
-            plt.show()
-            exit()
-        y_pred = lm.predict(t)
-        m = lm.coef_
-        ent_coeff.append(get_ent_coeff(m, S, plume_F)[0])
-        rms.append(sqrt(mean_squared_error(y_full, y_pred)))
-        try:
-            if (ent_coeff[-1] == kwargs['min_case'][0]) and \
-               (v_origin == kwargs['min_case'][1]) and \
-               (thres == kwargs['min_case'][2]):
-                details = (ent_coeff[-1], v_origin, rms[-1])
-                plot_lin_regress(t, y_full, y_pred, details, kwargs['video_loc'])
+            details = (ent_coeff, v_origin, rms)
+            plot_lin_regress(time, y_full, y_pred, details, kwargs['video_loc'])
         except KeyError:
             pass
-    rms = np.array(rms)
-    ent_coeff = np.array(ent_coeff)
-    try:
-        if thres == kwargs['min_case'][2]:
-            # Save the plot
-            plt.plot(v_origins, rms, color='r', label='rms')
-            plt.plot(v_origins, ent_coeff, ls='--', color='orange', label='$alpha_G - pred$')
-            plt.legend()
-            plt.xlabel('$virtual origin z_v/H$')
-            plt.ylabel('RMS of linear fit, entrainment coefficient')
-            plt.savefig(f'{video_loc}analysis/best_v_origin.png')
-            plt.close()
-    except KeyError:
-        pass
-    # Find the minimum rms value for this threshold
-    min_idx = np.where(rms == np.amin(rms))[0][0]
-    rms_min = rms[min_idx]
-    ent_coeff_min = ent_coeff[min_idx]
-    v_origins_min = v_origins[min_idx]
 
-    return (rms_min, ent_coeff_min, v_origins_min)
+    return (rms, ent_coeff)
+
+def plot_2d_data(rms_df, ent_coeff_df, video_loc, **kwargs):
+    '''Function will plot a slice, fixing either the v origin or the threshold value'''
+    fig = plt.figure()
+    plt.ylabel(r'\$ \alpha_{G}\$ and \$E_{rms}\$')
+    
+    if 'thres' and 'v_origin' in kwargs:
+        print('only define the threshold or the virtual origin, not both')
+    
+    elif 'thres' in kwargs:
+        rms = rms_df[kwargs['thres']]
+        ent_coeff = ent_coeff_df[kwargs['thres']]
+        x = rms_df.index
+        plt.xlabel(r'\$ z_v/H \$')
+        plt.text(0.08, 0.095, r'\$ -\ln\big(\frac{I}{I_0}\big)=\$'+ '{:0.3f}'.format(kwargs['thres']))
+    elif 'v_origin' in kwargs:
+        rms = rms_df.loc[kwargs['v_origin']]
+        ent_coeff = ent_coeff_df.loc[kwargs['v_origin']]
+        x = rms_df.columns
+        plt.xlabel(r'\$ -\ln\frac{I}{I_0}, threshold value \$')
+    
+    # Save the plot
+    plt.plot(x, rms, color='r', label='rms')
+    plt.plot(x, ent_coeff, color='orange', label='$alpha_G - pred$')
+    # plt.legend()
+    plt.grid(True)
+    plt.savefig(f'{video_loc}analysis/best_v_origin.png')
+    if 'thres' in kwargs:
+        thres_str = str(kwargs['thres'])[:5].replace('.','_')
+        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_thres_{}_ent_coeff'.format(video_loc[7:-1], thres_str))
+    if 'v_origin' in kwargs:
+        v_origin_str = str(kwargs['v_origin'])[:5].replace('.','_')
+        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_v_origin_{}_ent_coeff'.format(video_loc[7:-1], v_origin_str))
+    plt.close()
+
+def plot_min_each_thres(rms_df, ent_coeff_df, min_vals, video_loc):
+    '''Plots the results for the minimum RMS for each threshold value chosen'''
+    fig = plt.figure()
+    rms_df = rms_df.astype('float64')
+    ent_coeff_df = ent_coeff_df.astype('float64')
+    v_origin_min = rms_df.idxmin(axis=0)
+    thres_vals = v_origin_min.index
+    rms_min = rms_df.min(axis=0)
+    ent_coeff_min = pd.Series([ent_coeff_df.loc[z_v, thres] for (z_v, thres) in zip(v_origin_min, thres_vals)])
+    plt.plot(thres_vals, rms_min, label='rms', color='r')
+    plt.plot(thres_vals, ent_coeff_min, label='alpha', color='orange')
+    plt.plot(thres_vals, v_origin_min, label='$z_v$', color='k')
+    plt.grid(True)
+    # plt.legend()
+    plt.xlabel(r'\$ -\ln\big(\frac{I}{I_0}\big)\$' + '  threshold value')
+    plt.ylabel(r'\$\alpha_{G}\$'+ ', ' + r'\$E_{rms}\$'+ ', ' + r'\$z_v\$')
+    plt.xlim([thres_vals[0], thres_vals[-1]])
+    plt.savefig(f'{video_loc}analysis/overall_graph.png')
+    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_min_vals'.format(video_loc[7:-1]))
+    plt.close()
+
+def plot_surface(df, video_loc, ent_coeff=True):
+    '''will create a 3d surface plot of the entire space for either entrainment coefficient of the RMS'''
+    fig = plt.figure(dpi = 150)
+    ax1 = fig.add_subplot(1,1,1, projection='3d')
+    X, Y = np.meshgrid(df.columns, df.index)
+    ax1.plot_surface(X, Y, df, cmap= 'coolwarm',
+                     linewidth=0, antialiased=False, rasterized=True)
+    plt.show()
+    plt.close()
 
 
 if __name__ == '__main__':
-
+    # style.use('ggplot')
     CAPTURE_FRAMES = 0
     DENSITY_PROFILES = 0
     INTERFACE_HEIGHT = 0
     PLUME = 0
+    GEN_ENT_COEFFS = 0
+    PLOTTING = 1
 
     S = 0.45 * 0.3 # bot horizontal cross sectional area m^2
 
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
-
     video_loc = './Data/190521_2/'
     file_ext = '.jpg'
     fps = 50
@@ -164,18 +210,15 @@ if __name__ == '__main__':
 
     # Get list of file names
     file_ids = raw_img.get_image_fid(video_loc, file_ext)
-    FNAMES = list(map(int, file_ids[file_ext]))
-    FNAMES.sort()
-    FNAMES = list(map(str, FNAMES))
+    FNAMES = file_ids[file_ext[1:]]
+
     # load in camera matrix
     with open(f'{video_loc[:7]}cam_mtx.pickle', 'rb') as pickle_in:
         camera_params = pickle.load(pickle_in)
 
     # Get background images
     BG_IDS = raw_img.get_image_fid(video_loc + 'BG/', file_ext)
-    BG_FNAMES = list(map(int, BG_IDS[file_ext]))
-    BG_FNAMES.sort()
-    BG_FNAMES = list(map(str, BG_FNAMES))
+    BG_FNAMES = BG_IDS[file_ext[1:]]
 
     (BG, CROP_POS, box_dims) = raw_img.prep_background_imgs(
             [raw_img.raw_img(video_loc + 'BG/',
@@ -319,9 +362,6 @@ if __name__ == '__main__':
             except FileNotFoundError:
                 print('Pickle files don''t exist, need to create by changing DENSITY PROFILES = 1')
 
-        # Get Interface_height_data
-        ##########################################
-
         if INTERFACE_HEIGHT == 1:
             img.interface_height(vertical_scale, centre,
                                  methods=['grad', 'grad2'],
@@ -387,47 +427,57 @@ if __name__ == '__main__':
     DATA_FLIP_DROP = DATA_FLIP[DATA_FLIP.index.values < door_scale.loc['door', 'front']]
     DATA_DROP = DATA[DATA.index.values < door_scale.loc['door', 'front']]
 
+    if GEN_ENT_COEFFS == 1:
+        THRESHOLDS = np.linspace(0.10, 0.5, 80)
+        v_origins = np.linspace(0, 0.15, 150)
+        RMS = pd.DataFrame(index=v_origins, columns=THRESHOLDS)
+        ENT_COEFF = pd.DataFrame(index=v_origins, columns=THRESHOLDS)
+        for thres in THRESHOLDS:
+            time, y = get_threshold_contour(DATA_DROP, thres, (S, plume_F))
+            for z_v in v_origins:
+                RMSx , ENT_COEFFx = ent_coeff_and_v_origin(DATA_DROP, thres, z_v, time, y)
+                RMS.loc[z_v, thres] = RMSx
+                ENT_COEFF.loc[z_v, thres] = ENT_COEFFx
+        
+        # get the final values RMS_min
+        MIN_VALS = {'rms': RMS.min().min(),
+            'v origin': RMS.min(axis=1).idxmin(),
+            'thres': RMS.min(axis=0).idxmin(),
+            'ent coeff': ENT_COEFF.loc[RMS.min(axis=1).idxmin(), RMS.min(axis=0).idxmin()]}
+        
 
-    THRESHOLDS = np.linspace(0.15, 0.35, 80)
-    plot_filling_box_density(DATA_FLIP_DROP, door_scale.loc['door', 'front'],
-                             [THRESHOLDS[0], THRESHOLDS[-1]], video_loc)
+        with open(f'{video_loc}analysis/rms.pickle', 'wb') as pickle_out:
+            pickle.dump(RMS, pickle_out)
+        with open(f'{video_loc}analysis/ent_coeff.pickle', 'wb') as pickle_out:
+            pickle.dump(ENT_COEFF, pickle_out)
+        with open(f'{video_loc}analysis/min_vals.pickle', 'wb') as pickle_out:
+            pickle.dump(MIN_VALS, pickle_out)
 
-    RMS = []
-    ENT_COEFF = []
-    V_ORIGINS = []
+    else:
+        try:
+            with open(f'{video_loc}analysis/rms.pickle', 'rb') as pickle_in:
+                RMS = pickle.load(pickle_in)
+            with open(f'{video_loc}analysis/ent_coeff.pickle', 'rb') as pickle_in:
+                ENT_COEFF = pickle.load(pickle_in)
+            with open(f'{video_loc}analysis/min_vals.pickle', 'rb') as pickle_in:
+                MIN_VALS = pickle.load(pickle_in)
+        except FileNotFoundError:
+            print('Need to run code to generate values first. turn GEN_ENT_COEFFS = 1')
+            exit()
 
-    for thres in THRESHOLDS:
-        RMS_min, ENT_COEFF_min, V_ORIGINS_min = ent_coeff_and_v_origin(DATA_DROP,
-                                                                       thres, const=(S, plume_F))
-        RMS.append(RMS_min)
-        ENT_COEFF.append(ENT_COEFF_min)
-        V_ORIGINS.append(V_ORIGINS_min)
+    if PLOTTING == 1:
 
-    RMS = np.asarray(RMS)
-    ENT_COEFF = np.asarray(ENT_COEFF)
-    V_ORIGINS = np.asarray(V_ORIGINS)
-    # get the final values RMS_min
-    MIN_IDX = np.where(RMS == np.amin(RMS))[0][0]
-    RMS_MIN = RMS[MIN_IDX]
-    ENT_COEFF_MIN = ENT_COEFF[MIN_IDX]
-    V_ORIGINS_MIN = V_ORIGINS[MIN_IDX]
-    THRES_MIN = THRESHOLDS[MIN_IDX]
+        # plot_filling_box_density(DATA_FLIP_DROP, door_scale.loc['door', 'front'],
+                            #   [THRESHOLDS[0], THRESHOLDS[-1]], video_loc)
 
+        # rerun the function to plot the important graphs
+        time, y = get_threshold_contour(DATA_DROP, MIN_VALS['thres'], (S, plume_F))
+        _ = ent_coeff_and_v_origin(DATA_DROP, MIN_VALS['thres'], MIN_VALS['v origin'], time, y,
+                                          plot_regression=True, video_loc=video_loc)
 
-    #rerun the function to plot the important graphs
-    MIN_VALS = ent_coeff_and_v_origin(DATA_DROP, THRES_MIN,
-                                      const=(S, plume_F),
-                                      min_case=(ENT_COEFF_MIN, V_ORIGINS_MIN, THRES_MIN),
-                                      video_loc=video_loc)
-    RMS_MIN, ENT_COEFF_MIN, V_ORIGINS_MIN = MIN_VALS
+        plot_2d_data(RMS, ENT_COEFF, video_loc, thres=MIN_VALS['thres'])
 
-    plt.plot(THRESHOLDS, RMS, label='rms', color='r')
-    plt.plot(THRESHOLDS, ENT_COEFF, label='alpha', color='orange')
-    plt.plot(THRESHOLDS, V_ORIGINS, label='$z_v$', color='k')
-    plt.grid(True)
-    plt.legend()
-    plt.xlabel('Absorbance Threshold')
-    plt.ylabel('RMS, entrainment coefficient, virtual origin')
-    plt.xlim([THRESHOLDS[0], THRESHOLDS[-1]])
-    plt.savefig(f'{video_loc}analysis/overall_graph.png')
-    plt.close()
+        plot_min_each_thres(RMS, ENT_COEFF, MIN_VALS, video_loc)
+       
+        # plot_surface(RMS, video_loc, ent_coeff=True)
+        

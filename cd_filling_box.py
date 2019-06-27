@@ -11,33 +11,15 @@ import pandas as pd
 import raw_img
 from plume_prelim import plume_time_ave
 from video_to_frames import video_to_frames
+from scipy.stats import linregress
+from savepdf_tex import savepdf_tex
 
 
 # --------------------------------------#
 
-def plot_draining_box_density(df, door, video_loc):
-
-    # max_grad = get_interface_max_gradient(df) 
-    ax = plt.axes()
-    tick_spacing = 40
-    colors = plt.pcolor(df, cmap='coolwarm')
-    plt.colorbar(colors, ax=ax, orientation='vertical', label=r'$-\ln(\frac{I}{I_0})$')
-    ylabs = ["%.2f"%item for item in df.index.values[0::tick_spacing] ]
-    xlabs = ["%.0f"%item for item in df.columns.values[0::tick_spacing] ]
-    plt.yticks(np.arange(0.5, len(df.index), tick_spacing), ylabs)
-    plt.xticks(np.arange(0.5, len(df.columns), tick_spacing), xlabs, rotation='vertical')
-    door_idx = min(range(df.shape[0]), key=lambda i: abs(df.index[i]- door))
-    plt.plot([0, len(df.columns)], [door_idx, door_idx], color='r', label='door')
-    # plt.plot(max_grad.index.values / time_between_img, max_grad, color = 'g', label = 'max grad' )
-    plt.xlabel('Time (s)')
-    plt.ylabel('h/H')
-    plt.legend(loc='upper left')
-    plt.savefig(f'{video_loc}analysis/density.png', dpi=300)
-    plt.close()
-
 def ss_density_check(data, save_loc):
     rho_mean = data['back'].xs(key=('box','mean'), axis=1, level=[1, 2])
-    columns = rho_mean.columns.values[::15]
+    columns = rho_mean.columns.values[::2]
 
     for col in columns:
         plt.plot(rho_mean[col], rho_mean.index, label=str(col))
@@ -48,23 +30,22 @@ def ss_density_check(data, save_loc):
     plt.close()
 
 
-
 if __name__ == '__main__':
 
     CAPTURE_FRAMES = 0
     DENSITY_PROFILES = 0
     INTERFACE_HEIGHT = 0
-    CHECK_SS = 1
+    CHECK_SS = 0
 
 
     S = 0.45 * 0.3 # bot horizontal cross sectional area m^2
 
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
 
-    video_loc = './Data/190619/'
+    video_loc = './Data/190619_3/'
     file_ext = '.jpg'
     fps = 50
-    time_between_img = 0.1 # seconds
+    time_between_img = 0.5 # seconds
     plume_absorbance_thres = (0.0, 0.15)
     # Not needed but saves changing the prep_background imgs func
     with open(f'{video_loc[:7]}cam_mtx.pickle', 'rb') as pickle_in:
@@ -72,8 +53,7 @@ if __name__ == '__main__':
     if CAPTURE_FRAMES == 1:
         # create jpgs frames
         video_to_frames(video_loc, '00000.MTS', image_ext=file_ext, 
-                        video_fps=fps, spacing=time_between_img, start_time=0)
-    
+                        video_fps=fps, spacing=time_between_img, start_time=10)
     # Get list of file names
     file_ids = raw_img.get_image_fid(video_loc, file_ext)
     FNAMES = file_ids[file_ext]
@@ -92,6 +72,7 @@ if __name__ == '__main__':
         img.get_experiment_conditions(get_g_ss = True)
         if count == 0:
             plume_q = (img.plume_q*1e-06) / 60 # m^3s^-1
+            bottom_opening_area = img.bottom_opening_diameter**2 * pi *1e-06 / 4.0
             plume_g = (img.sol_denisty - 0.999) * 9.81 / 0.999 # ms^-2
             g_ss = (img.rho_ss - 0.999) * 9.81 / 0.999 # ms^-2
         img.convert_centre_pixel_coordinate(CROP_POS)
@@ -201,7 +182,6 @@ if __name__ == '__main__':
             break
         print(str(count+1) + ' of ' + str(len(FNAMES)) + ' images processed in folder')
 
-
     # Write dataframes to pickle
     if DENSITY_PROFILES == 1:
         FNAME = video_loc + 'analysis/' + file_ext[1:] + '_density.pickle'
@@ -272,25 +252,62 @@ if __name__ == '__main__':
 
     # # Analysis Section
     # ##########################################
-
+    
     DATA = density['front'].xs(key=('box', 'mean'), axis=1, level=[1, 2])
     # # this will flip the DATAframe and therefore hopefully the plot
     # DATA_FLIP = DATA.sort_index(axis=0, ascending=True)
     # # drop rows which are higher than the door
     # DATA_FLIP_DROP = DATA_FLIP[DATA_FLIP.index.values < door_scale.loc['door', 'front']]
     DATA_DROP = DATA[DATA.index.values < door_scale.loc['door', 'front']]
-
-    plot_draining_box_density(DATA_DROP, door_scale.loc['door', 'front'], video_loc)
+    time = DATA.columns
    
-   
-    # 1. Create an array of the interface height. Thnk we will have to use a threshold for this.
-
+    # 1. Create an array of the interface height. 
+    grad = interface_height['front'].xs(key='grad', axis=1, level=1).mean(axis=0)
+    grad2 = interface_height['front'].xs(key='grad2', axis=1, level=1).mean(axis=0)
+    # just use grad...
+    
     # 2. Calulate dh/dt
+    grad_real = grad*0.3 #dimensionalise the gradient
+    rolling_mean_no = 100
+    dhdt = 0.0 - (np.gradient(grad_real.rolling(rolling_mean_no, center=True).mean(), time_between_img))
+    eff_a = S / ((g_ss * (grad*0.3))**0.5) * dhdt # eff_a
+    cd_raw = eff_a / (2**0.5 * bottom_opening_area)
     
-    # 3. depending on experiment conditions either caculate the discharge coefficient directly 
-    # or use a already calulated value for the side opening.
-   
-   
-   
-   
+    cd_raw_for_lin_reg = cd_raw.dropna()
+    trend = linregress(cd_raw_for_lin_reg.index, cd_raw_for_lin_reg)
+    cd = {'mean': cd_raw.mean(),  'std': cd_raw.std()}
+
+    # latexify.latexify()
+    # PLotting
+
+
+    fig = plt.figure(figsize=(8,8))
+    ax1 = plt.subplot2grid((3, 3), (0, 0), colspan=3)
+    ax2 = plt.subplot2grid((3, 3), (1, 0), colspan=3, rowspan=2, sharex=ax1)
+
+    ax1.plot(time, cd_raw, color='k', lw=0, marker='o', markersize=3)
+    ax1.plot(time, [trend.slope*t + trend.intercept for t in time], color='r', ls='--')
+    ax1.set_ylabel(r'\$C_d\$')
     
+
+    door = door_scale.loc['door', 'front']
+    colors = ax2.pcolor(DATA_DROP.columns, DATA_DROP.index, DATA_DROP, cmap='coolwarm', rasterized=True)
+    # plt.colorbar(colors, ax=ax2, orientation='vertical', label=r'$-\ln(\frac{I}{I_0})$', fraction=0.01, pad=0.01)
+    ax2.plot([0, max(DATA_DROP.columns)], [door, door], color='r', label='door')
+    ax2.plot(DATA_DROP.columns.values, grad, color='k',lw=3, label='grad')
+    ax2.plot(DATA_DROP.columns.values, grad2, color='k', lw=3, ls='--', label='grad2')
+    ax2.set_xlabel(r'\$Time (s)\$')
+    ax2.set_xlim([min(DATA_DROP.columns),max(DATA_DROP.columns)])
+    ax2.set_ylabel(r'\$\frac{h}{H}\$')
+    ax2.set_ylim([min(DATA_DROP.index),max(DATA_DROP.index)])
+    ax2.legend(loc='upper right')
+
+    # plt.suptitle(r"Bottom opening diameter: {}mm"
+    #              "\n"
+    #              r"Side opening height: {}mm"
+    #               "\n"
+    #              r"\$C_d\$: {:0.3f} (mean)".format(img.bottom_opening_diameter, img.side_opening_height, cd['mean']) )
+  
+    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_cd_draining_box'.format(video_loc[7:-1]))
+    # plt.savefig(f'{video_loc}analysis/cd.png', dpi=300)
+    plt.close()

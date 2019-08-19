@@ -1,5 +1,6 @@
 #Dont track content of these folders
 /Data/
+/EFB_unbalanced_theory/
 
 # No jpgs arw png or matlab files
 **/*.JPG

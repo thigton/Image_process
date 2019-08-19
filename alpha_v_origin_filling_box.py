@@ -66,6 +66,12 @@ def get_threshold_contour(df, thres, const):
     # Trim vertices to remove waves at start
     y = y[t > 25]
     t = t[t > 25]
+    # print(f'number of points for regression: {len(t)}')
+    # if len(t) <100: 
+    #     print(t)
+    #     print(y)
+    #     plt.pcolor(df, cmap='coolwarm', rasterized=True)
+    #     plt.show()
     # close contour plot
     plt.close()
     return (t, y)
@@ -78,7 +84,7 @@ def plot_lin_regress(x, y, y_pred, details, video_loc):
     plt.scatter(x[::20], y[::20], marker='+', label='data', color='k')
     plt.plot(x, y_pred, label='lin_reg', ls='--', color='k')
     plt.xlabel(r'\$time (s)\$')
-    plt.ylabel(r'\$h^{-2/3} (m^{-2/3})=\$')
+    plt.ylabel(r'\$h^{-2/3} (m^{-2/3})\$')
     plt.grid(True)
     plt.text(50,5,r"\$ \alpha_{G}=\$"+ ' {:.4f} \n'.format(ent_coeff)+
                   r"\$z_v/H=\$"+ " {:.4f} \n".format(v_origin)+
@@ -110,6 +116,15 @@ def ent_coeff_and_v_origin(df, thres, v_origin, time, y, **kwargs):
     m = lm.coef_
     ent_coeff = get_ent_coeff(m, S, plume_F)[0]
     rms = sqrt(mean_squared_error(y_full, y_pred))
+    # if rms < 0.001:
+    #     print(f'thres={thres}')
+    #     print(f'time={time}')
+    #     print(f'y_full={y_full}')
+    #     print(f'y_pred={y_pred}')
+    #     plt.scatter(time[::20], y_full[::20], marker='+', label='data', color='k')
+    #     plt.plot(time, y_pred, label='lin_reg', ls='--', color='k')
+    #     plt.show()
+    #     plt.close()
 
     if 'plot_regression' in kwargs:
         try:
@@ -123,7 +138,7 @@ def ent_coeff_and_v_origin(df, thres, v_origin, time, y, **kwargs):
 def plot_2d_data(rms_df, ent_coeff_df, video_loc, **kwargs):
     '''Function will plot a slice, fixing either the v origin or the threshold value'''
     fig = plt.figure()
-    plt.ylabel(r'\$ \alpha_{G}\$ and \$E_{rms}\$')
+    plt.ylabel(r'\$ \alpha_{G}\$, \$E_{rms}\$')
     
     if 'thres' and 'v_origin' in kwargs:
         print('only define the threshold or the virtual origin, not both')
@@ -147,11 +162,9 @@ def plot_2d_data(rms_df, ent_coeff_df, video_loc, **kwargs):
     plt.grid(True)
     plt.savefig(f'{video_loc}analysis/best_v_origin.png')
     if 'thres' in kwargs:
-        thres_str = str(kwargs['thres'])[:5].replace('.','_')
-        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_thres_{}_ent_coeff'.format(video_loc[7:-1], thres_str))
+        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_thres_2d_ent_coeff'.format(video_loc[7:-1]))
     if 'v_origin' in kwargs:
-        v_origin_str = str(kwargs['v_origin'])[:5].replace('.','_')
-        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_v_origin_{}_ent_coeff'.format(video_loc[7:-1], v_origin_str))
+        savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', '{}_v_origin_2d_ent_coeff'.format(video_loc[7:-1]))
     plt.close()
 
 def plot_min_each_thres(rms_df, ent_coeff_df, min_vals, video_loc):
@@ -198,7 +211,7 @@ if __name__ == '__main__':
     S = 0.45 * 0.3 # bot horizontal cross sectional area m^2
 
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
-    video_loc = './Data/190521_2/'
+    video_loc = './Data/190521_4/'
     file_ext = '.jpg'
     fps = 50
     time_between_img = 0.5 # seconds
@@ -426,18 +439,25 @@ if __name__ == '__main__':
     # drop rows which are higher than the door
     DATA_FLIP_DROP = DATA_FLIP[DATA_FLIP.index.values < door_scale.loc['door', 'front']]
     DATA_DROP = DATA[DATA.index.values < door_scale.loc['door', 'front']]
-
+    THRESHOLDS = np.linspace(0.10, 0.5, 161)
+    v_origins = np.linspace(0, 0.15, 151)
     if GEN_ENT_COEFFS == 1:
-        THRESHOLDS = np.linspace(0.10, 0.5, 80)
-        v_origins = np.linspace(0, 0.15, 150)
+        print('Generating entrainment coefficients')
         RMS = pd.DataFrame(index=v_origins, columns=THRESHOLDS)
         ENT_COEFF = pd.DataFrame(index=v_origins, columns=THRESHOLDS)
         for thres in THRESHOLDS:
+            print(f'{np.where(THRESHOLDS==thres)[0][0]/len(THRESHOLDS)*100:0.1f}% through.')
             time, y = get_threshold_contour(DATA_DROP, thres, (S, plume_F))
+            if len(time) < 100: # drop column in df if not enough points for a good linear regression
+                RMS.drop([thres],axis=1, inplace=True)
+                ENT_COEFF.drop([thres],axis=1, inplace=True)
+                continue
             for z_v in v_origins:
+
                 RMSx , ENT_COEFFx = ent_coeff_and_v_origin(DATA_DROP, thres, z_v, time, y)
                 RMS.loc[z_v, thres] = RMSx
                 ENT_COEFF.loc[z_v, thres] = ENT_COEFFx
+
         
         # get the final values RMS_min
         MIN_VALS = {'rms': RMS.min().min(),
@@ -464,11 +484,12 @@ if __name__ == '__main__':
         except FileNotFoundError:
             print('Need to run code to generate values first. turn GEN_ENT_COEFFS = 1')
             exit()
-
+    print(MIN_VALS)
+    exit()
     if PLOTTING == 1:
 
-        # plot_filling_box_density(DATA_FLIP_DROP, door_scale.loc['door', 'front'],
-                            #   [THRESHOLDS[0], THRESHOLDS[-1]], video_loc)
+        plot_filling_box_density(DATA_FLIP_DROP, door_scale.loc['door', 'front'],
+                              [THRESHOLDS[0], THRESHOLDS[-1]], video_loc)
 
         # rerun the function to plot the important graphs
         time, y = get_threshold_contour(DATA_DROP, MIN_VALS['thres'], (S, plume_F))

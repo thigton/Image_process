@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
 
-    video_loc = './Data/190619_3/'
+    video_loc = './Data/190619/'
     file_ext = '.jpg'
     fps = 50
     time_between_img = 0.5 # seconds
@@ -56,11 +56,11 @@ if __name__ == '__main__':
                         video_fps=fps, spacing=time_between_img, start_time=10)
     # Get list of file names
     file_ids = raw_img.get_image_fid(video_loc, file_ext)
-    FNAMES = file_ids[file_ext]
+    FNAMES = file_ids[file_ext[1:]]
 
     # Get background images
     BG_IDS = raw_img.get_image_fid(video_loc + 'BG/', file_ext)
-    BG_FNAMES = BG_IDS[file_ext]
+    BG_FNAMES = BG_IDS[file_ext[1:]]
 
     (BG, CROP_POS, box_dims) = raw_img.prep_background_imgs(
             [raw_img.raw_img(video_loc + 'BG/',

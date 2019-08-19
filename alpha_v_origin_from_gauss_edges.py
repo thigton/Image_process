@@ -110,9 +110,10 @@ def get_plume_edges(img_ave):
 def plume_edge_linear_regression(img_ave, rad, cent, rel_imgs_dir):
     '''Returns coefficients for a linear regression
     for the plume width and distance from source  '''
+
     top = 0 # start of lin regression
-    bot = 300 # end of lin regression
-    bot_raw = 400 # end of the edges to plot
+    bot = 275 # end of lin regression
+    bot_raw = 275 # end of the edges to plot
     # just going to look at the middle of the plume at the moment.
     left_r = [r[0] for r in rad[top:bot]]
     left_r = list(map(lambda r: img_ave.index[0] - img_ave.index[int(r)], left_r))
@@ -157,7 +158,8 @@ def plume_edge_linear_regression(img_ave, rad, cent, rel_imgs_dir):
     #              alpha_G - left : {params.loc['alpha','left']:0.4f} / right : {params.loc['alpha','right']:0.4f}
     #              v origin - left : {params.loc['v origin','left']:0.4f} / right : {params.loc['v origin','right']:0.4f}''')
     plt.savefig(f'{rel_imgs_dir}/plume_time_ave/edge_lin_regress.png', dpi=300)
-    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_edge'.format(rel_imgs_dir[7:-9]))
+    plt.show()
+    # savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_edge'.format(rel_imgs_dir[7:-9]))
     plt.close()
 
 
@@ -182,7 +184,7 @@ def plot_plume_gaussian_on_image(img_ave, rel_imgs_dir, cent, rad):
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax2.imshow(img_ave, vmin=0, vmax=0.15)
 
-    for row, c, r in zip(img_ave.index[50:401:50], cent[50:401:50], rad[50:401:50]):
+    for row, c, r in zip(img_ave.index[25:276:50], cent[25:276:50], rad[25:276:50]):
         color=next(ax1._get_lines.prop_cycler)['color']
         row_loc = img_ave.index.get_loc(row)
         dat = img_ave.loc[row, :]
@@ -198,8 +200,9 @@ def plot_plume_gaussian_on_image(img_ave, rel_imgs_dir, cent, rad):
     ax1.set_xlim([-5,5])
     ax1.set_ylabel(r'\$ A/A_{max}\$')
     ax2.axis('off')
-    # plt.show()
-    savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_gauss_curve'.format(rel_imgs_dir[7:-9]))
+    plt.show()
+    # savepdf_tex(fig, '/home/tdh17/Documents/BOX/PhD/03 Writing/03_Thesis/figs_using/', r'{}_ent_coeff_gauss_curve'.format(rel_imgs_dir[7:-9]))
+    plt.close()
 
 
 if __name__ == '__main__':
@@ -208,8 +211,8 @@ if __name__ == '__main__':
     PLUME_ABSORBANCE_THRES = (0.0, 0.15)
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
 
-    DATA_LOC = ['190521_2']
-    # DATA_LOC = ['190328','190328_3' ,'190329','190405','190405_2', '190405_3']
+    # DATA_LOC = ['190521_2']
+    DATA_LOC = ['190405_2']
     for data in DATA_LOC:
         REL_IMGS_DIR = './Data/' + data + '/analysis' # File path relative to the script
 
@@ -217,6 +220,7 @@ if __name__ == '__main__':
                    if x.endswith('secs.pickle')]
 
         for p in pickles:
+            print(p)
             try:
                 with open(f'{REL_IMGS_DIR}/plume_time_ave/{p}', 'rb') as pickle_in:
                     image_time_ave = pickle.load(pickle_in)

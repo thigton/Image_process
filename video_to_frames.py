@@ -2,7 +2,7 @@ import cv2
 import os
 import math as m
 
-def video_to_frames(path, fname,video_fps = 50, image_ext = '.jpg', spacing = 10, start_time = 0, **kwargs):
+def video_to_frames(path, fname,video_fps = 50, image_ext = '.jpg', spacing = 0.5, start_time = 0, **kwargs):
     '''Will save jpg frames of video file in same folder as the video
     path - str location of video file relative to cwd
     fname - str video file name
@@ -22,12 +22,13 @@ def video_to_frames(path, fname,video_fps = 50, image_ext = '.jpg', spacing = 10
 
     if 'end_time' in kwargs:
         end_frame = kwargs['end_time'] * 50
+    else:
+        end_frame = 3600 * 50 # this is an hour
     count = start_frame
     while cap.isOpened():
         ret, frame = cap.read()
-
         if ret:
-            cv2.imwrite(path + str(count) + image_ext,frame)
+            cv2.imwrite(f'{path}{count:06d}{image_ext}',frame)
             count += spacing_frame
             if count > end_frame:
                 break

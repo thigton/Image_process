@@ -10,27 +10,28 @@ import pandas as pd
 import raw_img
 import plot
 import matplotlib.pyplot as plt
+from EFB_unbalanced_theory.caseA import caseA
 #-------------------------------------------#
 
 if __name__ == '__main__':
     #pylint: disable=no-member
 
     # OPTIONS [1 = Create New Dataframe. 0 = Load in existing Dataframe]
-    DENSITY_PROFILES = 1
-    INTERFACE_HEIGHT = 1
+    DENSITY_PROFILES = 0
+    INTERFACE_HEIGHT = 0
     INTERFACE_HEIGHT_METHODS = ['threshold', 'grad', 'grad2']
     INTERFACE_HEIGHT_METHODS_TO_PLOT = 'grad2'
     FILE_EXT = '.ARW'
     # [1 = YES , 0 = NO]
-    SAVE = 0
-    PLOT_DATA = 1
+    SAVE = 1
+    PLOT_DATA = 0
     TIME = 0
 
     if TIME == 1:
         TIC = time.time()
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
-    THEORY_DF = plot.import_theory() # import the theory steady state dataframe
-    DATA_LOC = ['190328_3'] #'190328'
+    
+    DATA_LOC = ['190730_6']
     for data in DATA_LOC:
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
 
@@ -40,10 +41,10 @@ if __name__ == '__main__':
 
         # Get list of file names
         file_ids = raw_img.get_image_fid(rel_imgs_dir, FILE_EXT)
-        filenames = file_ids[FILE_EXT]
+        filenames = file_ids[FILE_EXT[1:]]
         # Get background images
         BG_ids = raw_img.get_image_fid(rel_imgs_dir + 'BG/', FILE_EXT)
-        BG_filenames = BG_ids[FILE_EXT]
+        BG_filenames = BG_ids[FILE_EXT[1:]]
 
         # Check histogram of background image
         # img_b = raw_img.raw_img(rel_imgs_dir + 'BG/', BG_filenames[1], FILE_EXT)
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         #crop background imgs and get crop_pos
         (BG, crop_pos, box_dims) = raw_img.prep_background_imgs(
             [raw_img.raw_img(rel_imgs_dir + 'BG/',
-                             f, FILE_EXT) for f in BG_filenames], undistort=camera_params)
+                             f, FILE_EXT) for f in BG_filenames], camera_params)
 
         #----------------------------------------------------------------
 
@@ -68,6 +69,8 @@ if __name__ == '__main__':
              # import image
             img = raw_img.raw_img(rel_imgs_dir, f, FILE_EXT)
             img.get_experiment_conditions()
+            exp_conditions = {'soh':img.side_opening_height, 'bod': img.bottom_opening_diameter, 'sol_no': img.sol_no}
+            THEORY_DF = plot.import_theory(exp_conditions) # import the theory steady state dataframe
             img.convert_centre_pixel_coordinate(crop_pos)
 
             if count == 0:
@@ -96,10 +99,13 @@ if __name__ == '__main__':
                     with open(rel_imgs_dir + FILE_EXT[1:] +
                               '_analysis_area.pickle', 'rb') as pickle_in:
                         analysis_area = pickle.load(pickle_in)
-
                 except FileNotFoundError:
                     img1 = raw_img.raw_img(rel_imgs_dir, filenames[-1], FILE_EXT)
+                    if FILE_EXT == '.ARW':
+                        img1.undistort(camera_params)
+                        img1.black_offset(metadata['BlackLevel'], method=0)
                     img1.crop_img(crop_pos)
+                    img1.normalise(BG)
                     print('''Choose analysis area... \n
                           Ensure the top and bottom are within the depth of the box''')
                     analysis_area = img1.choose_crop()

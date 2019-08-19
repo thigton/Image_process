@@ -88,13 +88,14 @@ class raw_img():
         with open('Data/experiment_details.csv', 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
-                if row[10] == self.img_loc.split('/')[-2]:
+                if row[11] == self.img_loc.split('/')[-2]:
                     self.bottom_opening_diameter = int(row[3])
                     self.side_opening_height = int(row[4])
-                    self.sol_no = row[5]
-                    self.plume_q = int(row[11])
+                    self.side_opening_width = int(row[5])
+                    self.sol_no = row[6]
+                    self.plume_q = int(row[12])
                     if 'get_g_ss' in kwargs:
-                        self.rho_ss = float(row[12])
+                        self.rho_ss = float(row[13])
 
         with open('Data/solution.csv', 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
@@ -219,15 +220,13 @@ class raw_img():
         # housekeeping
         self.status['cropped'] = True
 
-    def disp_img(self, disp=True, crop=False, save=False, channel='red', colormap='inferno'):
+    def disp_img(self, disp=True, crop=False, save=False, channel='red', colormap='Greys'):
         """Function displays the image on the screen
         OPTIONS - 	disp - True - whether to actually display the image or not
                     crop = True - cropped as by crop_img False - Full image
                     save - False - save one of the channels
                     channel = string - red, green, blue
                     colormap - control the colors of the image - default is grayscale"""
-
-
         if disp:
             if crop:
                 plt.imshow(getattr(self, f'raw_{channel}'), aspect='equal', cmap=colormap)
@@ -238,18 +237,20 @@ class raw_img():
 
         if save:
             if crop:
+                if not os.path.exists(f'{self.img_loc}{self.ext}/{channel}_channel/'):
+                    os.makedirs(f'{self.img_loc}{self.ext}/{channel}_channel/')
+                # save image
+                plt_name = f'{self.img_loc}{self.ext}/{channel}_channel/{self.filename}.png'
+                plt.imsave(plt_name, np.flipud(0 - getattr(self, channel)), cmap=colormap, vmin=-1, vmax=0)
+            else:
                 # Create a folder with name if doesn't exist
                 if not os.path.exists(f'{self.img_loc}{self.ext}/raw_{channel}_channel/'):
                     os.makedirs(f'{self.img_loc}{self.ext}/raw_{channel}_channel/')
                 # save image
-                plt_name = f'{self.img_loc}{self.ext}/raw{channel}_channel/{self.filename}.png'
-                plt.imsave(plt_name, getattr(self, f'raw_{channel}'), cmap=colormap, vmin=0, vmax=1)
-            else:
-                if not os.path.exists(f'{self.img_loc}{self.ext}/{channel}_channel/'):
-                    os.makedirs(f'{self.img_loc}{self.ext}/{channel}_channel/')
-                # save imag
-                plt_name = f'{self.img_loc}{self.ext}/{channel}_channel/{self.filename}.png'
-                plt.imsave(plt_name, 0 - getattr(self, channel), cmap=colormap, vmin=-1, vmax=0)
+                plt_name = f'{self.img_loc}{self.ext}/raw_{channel}_channel/{self.filename}.png'
+                plt.imsave(plt_name, np.flipud(0 - getattr(self, f'raw_{channel}')), cmap=colormap, vmin=-1, vmax=0)
+        plt.close()
+
 
     def convert_centre_pixel_coordinate(self, crop_pos):
         '''returns the new coordinates of the
@@ -826,8 +827,6 @@ def plot_density(img, door, theory_df, interface):
     plt.style.use('seaborn-white')
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(16, 8))
 
-    theory_interface = theory_df.loc[img.bottom_opening_diameter, img.side_opening_height]
-
     for strip, (axis, scale) in itertools.product(['box', 'door'],
                                                   zip([ax1, ax3], ['front', 'back'])):
         # Density profiles
@@ -860,7 +859,7 @@ def plot_density(img, door, theory_df, interface):
             # door height
             axis.plot([0, plot_width], [door[scale], door[scale]], label='door_level', color='r')
             # steady state interface height
-            axis.plot([0, plot_width], [theory_interface, theory_interface],
+            axis.plot([0, plot_width], [theory_df['h'], theory_df['h']],
                       label='steady state', ls='--')
             axis.legend()
 
@@ -924,7 +923,7 @@ def plot_density_compare_scales(
     [2] - interface height scaled on the front of the box
     [3] - interface height scaled on the back of the box
     door_scale - door level
-    theory_df - dataframe with the theory  steadystate interface height'''
+    theory_df - dictionary of theory results for the experiment'''
 
 
     plot_width = 3
@@ -961,8 +960,7 @@ def plot_density_compare_scales(
     ax1.set_ylabel('h/H')
     ax1.set_xlabel('$A$')
 
-    theory_interface = theory_df.loc[exp_conditons['bod'], exp_conditons['soh']]
-    ax1.plot([0, plot_width], [theory_interface, theory_interface],
+    ax1.plot([0, plot_width], [theory_df['h'], theory_df['h']],
              label='steady state', ls=':', lw=2, color='black')
     ax1.legend()
 

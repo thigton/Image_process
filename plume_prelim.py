@@ -92,21 +92,21 @@ if __name__ == '__main__':
 
 
 
-    DATA_LOC = ['190521_4']
+    DATA_LOC = ['190405_2']
     # DATA_LOC = ['190405']# ,'190329','190405','190405_2', '190405_3']
     for data in DATA_LOC:
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
-        file_ext = '.jpg'
+        file_ext = '.ARW'
 
         # load in camera matrix
         with open(f'{rel_imgs_dir[:7]}cam_mtx.pickle', 'rb') as pickle_in:
             camera_params = pickle.load(pickle_in)
         # Get list of file names
         file_ids = raw_img.get_image_fid(rel_imgs_dir, file_ext)
-        filenames = file_ids[file_ext]
+        filenames = file_ids[file_ext[1:]]
         # Get background images
         BG_ids = raw_img.get_image_fid(rel_imgs_dir + 'BG/', file_ext)
-        BG_filenames = BG_ids[file_ext]
+        BG_filenames = BG_ids[file_ext[1:]]
         #crop background imgs and get crop_pos
         (BG, crop_pos, box_dims) = raw_img.prep_background_imgs(
             [raw_img.raw_img(rel_imgs_dir + 'BG/',
@@ -130,8 +130,6 @@ if __name__ == '__main__':
                 IMG.undistort(camera_params)
                 IMG.black_offset(metadata['BlackLevel'], method=0)
                 # realign
-
-
              #crop image
             IMG.crop_img(crop_pos)
             #normalise images
@@ -173,7 +171,7 @@ if __name__ == '__main__':
 
             # time has been picked out manually as a good
             # time average before the centreline starts to move
-            elif (COUNT == len(filenames) - 1) or (IMG.time == 317):
+            elif (COUNT == len(filenames) - 1) or (COUNT == 25):
                 image_time_ave = plume_time_ave(IMG, COUNT, save = True,
                                                 img_ave=image_time_ave,
                                                 thres=plume_absorbance_thres)

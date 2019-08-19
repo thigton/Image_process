@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
     REL_IMGS_DIR = './Data/190606_cam_cali/' # File path relative to the script
     FILE_EXT = '.ARW'
-    GET_CAM_MTX = 0
+    GET_CAM_MTX = 1
 
     if GET_CAM_MTX == 1:
         # termination CRITERIA
@@ -68,13 +68,13 @@ if __name__ == '__main__':
 
 
 
-    OBJ = raw_img.raw_img('./Data/190328/', 'DSC01087', FILE_EXT)
-    IMG = OBJ.raw_red
-    H, W = IMG.shape[:2]
-    NEWCAMERAMTX, ROI = cv2.getOptimalNewCameraMatrix(MTX, DIST, (W, H), 0, (W, H))
+    # OBJ = raw_img.raw_img('./Data/190328/', 'DSC01087', FILE_EXT)
+    # IMG = OBJ.raw_red
+    # H, W = IMG.shape[:2]
+    # NEWCAMERAMTX, ROI = cv2.getOptimalNewCameraMatrix(MTX, DIST, (W, H), 0, (W, H))
 
-    DST = cv2.undistort(IMG, MTX, DIST, None, NEWCAMERAMTX)
-    # crop the image
-    X, Y, W, H = ROI
-    DST = DST[Y:Y+H, X:X+W]
-    cv2.imwrite('./Data/190606_cam_cali/calibresult8.png', DST)
+    # DST = cv2.undistort(IMG, MTX, DIST, None, NEWCAMERAMTX)
+    # # crop the image
+    # X, Y, W, H = ROI
+    # DST = DST[Y:Y+H, X:X+W]
+    # cv2.imwrite('./Data/190606_cam_cali/calibresult8.png', DST)

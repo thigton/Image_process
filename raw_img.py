@@ -19,6 +19,7 @@ from scipy.signal import medfilt
 import itertools
 import pickle
 import cv2
+from EFB_unbalanced_theory.caseA import caseA
 
 #pylint: disable=no-member
 class raw_img():
@@ -186,7 +187,7 @@ class raw_img():
             if 'plume' in kwargs:
                 plume_h = int(input('y-coordinate of the plume source'))
                 l = ax1.add_line(Line2D([x1, x1+width], [plume_h, plume_h], linewidth=1, color='r'))
-            
+
             plt.draw()
             response = input('Are you happy with the crop area?  Do you want to continue? [Y/N]')
             rect.set_visible = False
@@ -220,13 +221,17 @@ class raw_img():
         # housekeeping
         self.status['cropped'] = True
 
-    def disp_img(self, disp=True, crop=False, save=False, channel='red', colormap='Greys'):
+    def disp_img(self, box_dims, interface, analysis_area, disp=True, crop=False, save=False, channel='red', colormap='Greys_r'):
         """Function displays the image on the screen
         OPTIONS - 	disp - True - whether to actually display the image or not
                     crop = True - cropped as by crop_img False - Full image
                     save - False - save one of the channels
                     channel = string - red, green, blue
                     colormap - control the colors of the image - default is grayscale"""
+        img = getattr(self, channel)
+        # convert the interface height data into pixel heights
+        def interface_to_pixel(x):
+            return (box_dims['f_y2'] - box_dims['f_y1']) * x + box_dims['f_y1']
         if disp:
             if crop:
                 plt.imshow(getattr(self, f'raw_{channel}'), aspect='equal', cmap=colormap)
@@ -239,9 +244,20 @@ class raw_img():
             if crop:
                 if not os.path.exists(f'{self.img_loc}{self.ext}/{channel}_channel/'):
                     os.makedirs(f'{self.img_loc}{self.ext}/{channel}_channel/')
+                fig, ax = plt.subplots()
+                ax.set_axis_off()
+                interface_px = interface.apply(interface_to_pixel)
+                ax.imshow(np.flipud(img), cmap=colormap)
+                ax.plot([box_dims['f_x1']-20, box_dims['f_x1']], [img.shape[0] - box_dims['door']]*2, color='red',lw=1)
+                ax.text(box_dims['f_x1']-10,img.shape[0] - box_dims['door'], 'Top of Door',
+                        verticalalignment='bottom', horizontalalignment='center', color='red', fontsize=6)
+                ax.plot(range(analysis_area['x1']+100,analysis_area['width']), interface_px, color='red')
                 # save image
+                # plt.show()
+                # plt.close()
+                # exit()
                 plt_name = f'{self.img_loc}{self.ext}/{channel}_channel/{self.filename}.png'
-                plt.imsave(plt_name, np.flipud(0 - getattr(self, channel)), cmap=colormap, vmin=-1, vmax=0)
+                plt.savefig(plt_name, bbox_inches='tight', pad_inches=0, dpi=500)
             else:
                 # Create a folder with name if doesn't exist
                 if not os.path.exists(f'{self.img_loc}{self.ext}/raw_{channel}_channel/'):
@@ -249,6 +265,86 @@ class raw_img():
                 # save image
                 plt_name = f'{self.img_loc}{self.ext}/raw_{channel}_channel/{self.filename}.png'
                 plt.imsave(plt_name, np.flipud(0 - getattr(self, f'raw_{channel}')), cmap=colormap, vmin=-1, vmax=0)
+        plt.close()
+
+    def presentation_frame(self, box_dims, interface, analysis_area, colormap='Greys_r'):
+        """method will produce a frame for the presentation video
+
+        Arguments:
+            box_dims {dict} -- dictionary with the coordinates
+            interface {[type]} -- [description]
+            analysis_area {[type]} -- [description]
+
+        Keyword Arguments:
+            colormap {str} -- [description] (default: {'Greys_r'})
+        """
+        def interface_to_pixel(x):
+            return (box_dims['f_y2'] - box_dims['f_y1']) * x + box_dims['f_y1']
+
+        z0 = self.side_opening_height/300
+
+        w0 = self.side_opening_width/300
+        at = self.bottom_opening_diameter**2*m.pi/(4*300**2)
+
+        params = [1, 1, 0.021, 0.1351, 0.65]
+        ubx_ss = caseA(params, w0, 1-z0, 0)
+        idx = min(range(len(ubx_ss.at)), key=lambda i: abs(ubx_ss.at[i]-at))
+        ubx_ss_h = ubx_ss.h1[idx]
+        if ubx_ss_h == np.amax(ubx_ss.h1):
+            idx = min(range(len(ubx_ss.at_LLSS)), key=lambda i: abs(ubx_ss.at_LLSS[i]-at))
+            ubx_ss_h = ubx_ss.LLSS[1][idx]
+        img = self.red
+        if not os.path.exists(f'{self.img_loc}{self.ext}/presentation_frames/'):
+            os.makedirs(f'{self.img_loc}{self.ext}/presentation_frames/')
+        fig, ax = plt.subplots(1,2, figsize=(10,4))
+        ax[0].set_axis_off()
+        interface_px = interface[self.time, 'grad'].apply(interface_to_pixel)
+        ax[0].imshow(np.flipud(img), cmap=colormap)
+        ax[0].plot([box_dims['f_x1']-20, box_dims['f_x1']], [img.shape[0] - box_dims['door']]*2, color='red',lw=1)
+        ax[0].text(box_dims['f_x1']-10,img.shape[0] - box_dims['door'], 'Top of Door',
+                verticalalignment='bottom', horizontalalignment='center', color='red', fontsize=6)
+
+        ax[0].plot(range(analysis_area['x1']+100,analysis_area['width']), interface_px, color='red')
+        density_profile = self.front_rho['box']
+        density_profile.index = pd.Series(density_profile.index.tolist()).apply(lambda x: 1 - x)
+        lns1 = ax[1].plot(density_profile['mean'], density_profile.index, color='black', label='density profile')
+        ax[1].fill_betweenx(density_profile.index,
+                           density_profile['mean'] + 2*density_profile['std'],
+                           density_profile['mean'] - 2*density_profile['std'],
+                           alpha=0.2, color='black')
+
+        ax[1].set_xlim([0,3])
+        ax[1].set_ylim([0,1])
+        ax[1].set_xlabel('A')
+        ax[1].set_ylabel(r"\$\xi\$")
+        asp = np.diff(ax[1].get_xlim())[0] / np.diff(ax[1].get_ylim())[0]
+        ax[1].set_aspect(asp)
+        ax2 = ax[1].twiny()
+        interface_to_plot = interface.xs(key='grad',axis=1, level=1)
+        interface_mean =  interface_to_plot.apply(np.mean, axis=0)
+        interface_std =  interface_to_plot.apply(np.std, axis=0)
+        interface_mean =  interface_mean.apply(lambda x: 1-x)
+        lns2 = ax2.plot(interface_mean.index[interface_mean.index <= self.time],
+                interface_mean[interface_mean.index <= self.time], color='red', label = 'interface height')
+        ax2.fill_between(interface_std.index[interface_mean.index <= self.time],
+                           interface_mean[interface_mean.index <= self.time] - 2*
+                           interface_std[interface_std.index <= self.time],
+                           interface_mean[interface_mean.index <= self.time] + 2*
+                           interface_std[interface_std.index <= self.time],
+                           alpha=0.2, color='red')
+        lns3 = ax2.plot([0,max(interface_mean.index)],[ubx_ss_h]*2, color='black', ls='--', label= 'Theory')
+        lns4 = ax2.plot([0,max(interface_mean.index)],[z0]*2, color='black', ls=':', label= 'Top of Door')
+        ax2.set_xlim([0,max(interface_mean.index)])
+        ax2.set_ylim([0,1])
+        ax2.tick_params(axis='x', labelcolor='red')
+        ax2.set_xlabel('time(s)', color='red')
+        # added these three lines
+        lns = lns1+lns2+lns3+lns4
+        labs = [l.get_label() for l in lns]
+        ax[1].legend(lns, labs, loc='upper right')
+        # save image
+        plt_name = f'{self.img_loc}{self.ext}/presentation_frames/{self.filename}.png'
+        plt.savefig(plt_name, bbox_inches='tight', pad_inches=0, dpi=500)
         plt.close()
 
 
@@ -361,7 +457,7 @@ class raw_img():
             self.plume = analysis_array
             self.plume.set_index(vertical_scale, inplace=True)
             return
-            
+
 
         # Split into analysis areas based on front and back scale and the two strips
         front_scale = pd.Series(vertical_scale[0], name='h/H')
@@ -392,7 +488,7 @@ class raw_img():
                     os.makedirs(self.img_loc + 'analysis/')
                 plt.savefig(self.img_loc + 'analysis/' + channel + '_channel_analysis_strips.png')
                 plt.close()
-        
+
 
 
 
@@ -489,8 +585,10 @@ class raw_img():
                             kernel_size=kwargs['median_filter']),
                     index=self.front_box_strip.columns)
                 # smooth out with a rolling_mean
+
                 self.front_interface[self.time, 'grad'] = self.front_interface[self.time, 'grad'].rolling(
                     25, center=True, min_periods=1).mean()
+
                 self.back_interface[self.time, 'grad'] = self.back_interface[self.time, 'grad'].rolling(
                     25, center=True, min_periods=1).mean()
             except KeyError as e:
@@ -541,7 +639,7 @@ def get_image_fid(rel_imgs_dir, *img_ext):
     """Function to get a list of file IDs to import.
     rel_imgs_dir = string - relative file path to this script
     *img_ext = string - extensions you want to list the IDs of"""
-    try:   
+    try:
         fid = {}
         for exts in img_ext:
             values = []
@@ -583,7 +681,7 @@ def prep_background_imgs(bg_imgs, camera_params):
         for img in bg_imgs:
             img.undistort(camera_params)
             img.black_offset(metadata['BlackLevel'])
-            
+
 
      # if csv file doesn't exist
     if not os.path.isfile(f'{bg_imgs[0].img_loc}{bg_imgs[0].ext}_initial_crop_area.pickle'):
@@ -744,15 +842,15 @@ def make_dimensionless(img, box_dims, analysis_area, **kwargs):
 
         # if the centre is outside the scale range (outside the box) then...
         if int(img.centre[0] - box_dims['f_x1']) < 0:
-            centre_position.loc[scale, 'horizontal'] = horizontal[int(img.centre[0] - 
+            centre_position.loc[scale, 'horizontal'] = horizontal[int(img.centre[0] -
                                                                       box_dims[f'{scale[0]}_x1'] + len(horizontal))] - 1
         else:
-            centre_position.loc[scale, 'horizontal'] = horizontal[int(img.centre[0] - 
+            centre_position.loc[scale, 'horizontal'] = horizontal[int(img.centre[0] -
                                                                       box_dims[f'{scale[0]}_x1'])]
     if 'plume' in kwargs:
         # define the position of the plume source on the front scale
         plume_full_scale = np.linspace(1, 0, box_dims['f_y2'] - analysis_area['plume_h'])
-        plume_vertical_scale =plume_full_scale[analysis_area['y1']-analysis_area['plume_h']: 
+        plume_vertical_scale =plume_full_scale[analysis_area['y1']-analysis_area['plume_h']:
                                                analysis_area['y1']+analysis_area['height']-analysis_area['plume_h']]
         return (centre_position, door_level, (f_v_scale, b_v_scale), (f_h_scale, b_h_scale), plume_vertical_scale)
 

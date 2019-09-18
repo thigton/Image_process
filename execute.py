@@ -23,15 +23,16 @@ if __name__ == '__main__':
     INTERFACE_HEIGHT_METHODS_TO_PLOT = 'grad2'
     FILE_EXT = '.ARW'
     # [1 = YES , 0 = NO]
-    SAVE = 1
+    SAVE = 0
     PLOT_DATA = 0
     TIME = 0
+    PRESENTATION_VIDEO = 1
 
     if TIME == 1:
         TIC = time.time()
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
-    
-    DATA_LOC = ['190730_6']
+
+    DATA_LOC = ['190729']
     for data in DATA_LOC:
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
 
@@ -94,7 +95,7 @@ if __name__ == '__main__':
 
             # split into a door strip and a box strip
             if count == 0:
-                
+
                 try:
                     with open(rel_imgs_dir + FILE_EXT[1:] +
                               '_analysis_area.pickle', 'rb') as pickle_in:
@@ -134,7 +135,6 @@ if __name__ == '__main__':
                 if TIME == 1:
                     print(str(time.time()-TIC) + 'sec to load in pickles')
                     TIC = time.time()
-
             # Define crop
             if count == len(filenames)-1:
                 # Save analysis area for last image
@@ -208,7 +208,6 @@ if __name__ == '__main__':
                     setattr(img, scale + '_interface', getattr(img, scale +'_interface')[img.time])
 
             else: # load in pickle
-
                 try:
                     if count == 0:
                         with open(rel_imgs_dir + 'analysis/' + FILE_EXT[1:] +
@@ -222,8 +221,8 @@ if __name__ == '__main__':
                     print('''Pickle files don''t exist,
                           need to create by changing INTERFACE_HEIGHT = 1''')
 
-
             if TIME == 1:
+
                 print(str(time.time()-TIC) + 'sec to analyse the interface height')
                 TIC = time.time()
 
@@ -239,8 +238,10 @@ if __name__ == '__main__':
 
             # save cropped red image
             if SAVE == 1:
-                img.disp_img(disp=False, crop=True, save=True, channel='red')
-
+                img.disp_img(box_dims,interface_height['front'][img.time]['grad'], analysis_area,
+                             disp=False, crop=True, save=True, channel='red')
+            if PRESENTATION_VIDEO == 1:
+                img.presentation_frame(box_dims, interface_height['front'], analysis_area)
             # housekeeping
             print(str(count+1) + ' of ' + str(len(filenames)) +
                   ' images processed in folder: ' + data +

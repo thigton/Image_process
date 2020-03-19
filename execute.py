@@ -17,22 +17,24 @@ if __name__ == '__main__':
     #pylint: disable=no-member
 
     # OPTIONS [1 = Create New Dataframe. 0 = Load in existing Dataframe]
-    DENSITY_PROFILES = 0
-    INTERFACE_HEIGHT = 0
+    DENSITY_PROFILES = 1
+    INTERFACE_HEIGHT = 1
     INTERFACE_HEIGHT_METHODS = ['threshold', 'grad', 'grad2']
-    INTERFACE_HEIGHT_METHODS_TO_PLOT = 'grad2'
+    INTERFACE_HEIGHT_METHODS_TO_PLOT = 'grad'
     FILE_EXT = '.ARW'
     # [1 = YES , 0 = NO]
-    SAVE = 0
-    PLOT_DATA = 0
+    SAVE = 1
+    PLOT_DATA = 1
     TIME = 0
     PRESENTATION_VIDEO = 1
+    COMPARE_CHANNEL_PROFILES = 1
 
     if TIME == 1:
         TIC = time.time()
     os.chdir(os.path.dirname(os.path.realpath(__file__))) # change cwd to file location
 
-    DATA_LOC = ['190729']
+
+    DATA_LOC = ['200313','200313_2']
     for data in DATA_LOC:
         rel_imgs_dir = './Data/' + data + '/' # File path relative to the script
 
@@ -68,13 +70,17 @@ if __name__ == '__main__':
             # Image preprocessing ========================
 
              # import image
-            img = raw_img.raw_img(rel_imgs_dir, f, FILE_EXT)
+            try:
+                img = raw_img.raw_img(rel_imgs_dir, f, FILE_EXT)
+            except:
+                print(f'Failed to read the RAW image: {f}')
             img.get_experiment_conditions()
             exp_conditions = {'soh':img.side_opening_height, 'bod': img.bottom_opening_diameter, 'sol_no': img.sol_no}
-            THEORY_DF = plot.import_theory(exp_conditions) # import the theory steady state dataframe
+            
             img.convert_centre_pixel_coordinate(crop_pos)
 
             if count == 0:
+                THEORY_DF = plot.import_theory(exp_conditions) # import the theory steady state dataframe
                 metadata = img.get_metadata()
                 img.get_time()
                 t0 = img.time # intial time
@@ -95,7 +101,6 @@ if __name__ == '__main__':
 
             # split into a door strip and a box strip
             if count == 0:
-
                 try:
                     with open(rel_imgs_dir + FILE_EXT[1:] +
                               '_analysis_area.pickle', 'rb') as pickle_in:
@@ -232,16 +237,22 @@ if __name__ == '__main__':
                 raw_img.plot_density(img, door_scale,
                                      THEORY_DF, interface=INTERFACE_HEIGHT_METHODS_TO_PLOT)
 
+
             if TIME == 1:
                 print(str(time.time()-TIC) + 'sec to plot the data')
                 TIC = time.time()
 
             # save cropped red image
             if SAVE == 1:
-                img.disp_img(box_dims,interface_height['front'][img.time]['grad'], analysis_area,
+                img.disp_img(box_dims,interface_height['front'][img.time]['grad'], analysis_area, door_strip = 100,
                              disp=False, crop=True, save=True, channel='red')
             if PRESENTATION_VIDEO == 1:
                 img.presentation_frame(box_dims, interface_height['front'], analysis_area)
+                # raw_img.image_for_paper(img, box_dims, density['front'], interface_height['front'], analysis_area)
+            if COMPARE_CHANNEL_PROFILES == 1:
+                raw_img.density_profiles_compare_channels(img, analysis_area, vertical_scale, door_scale)
+
+
             # housekeeping
             print(str(count+1) + ' of ' + str(len(filenames)) +
                   ' images processed in folder: ' + data +

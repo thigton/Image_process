@@ -79,7 +79,7 @@ class raw_img():
             with exiftool.ExifTool() as et:
                 self.time = int(datetime.strptime(et.get_tag('ModifyDate', self.file_path),
                                                   '%Y:%m:%d %H:%M:%S').timestamp() - t0)
-                et.terminate()
+                #et.terminate()
 
     def get_experiment_conditions(self, **kwargs):
         '''Accesses csv files with experiment details and make them attributes
@@ -221,7 +221,7 @@ class raw_img():
         # housekeeping
         self.status['cropped'] = True
 
-    def disp_img(self, box_dims, interface, analysis_area, disp=True, crop=False, save=False, channel='red', colormap='Greys_r'):
+    def disp_img(self, box_dims, interface, analysis_area,door_strip, disp=True, crop=False, save=False, channel='red', colormap='Greys_r'):
         """Function displays the image on the screen
         OPTIONS - 	disp - True - whether to actually display the image or not
                     crop = True - cropped as by crop_img False - Full image
@@ -231,7 +231,8 @@ class raw_img():
         img = getattr(self, channel)
         # convert the interface height data into pixel heights
         def interface_to_pixel(x):
-            return (box_dims['f_y2'] - box_dims['f_y1']) * x + box_dims['f_y1']
+            return self.red.shape[0] - (box_dims['f_y2'] - (box_dims['f_y2'] - box_dims['f_y1']) * x)
+
         if disp:
             if crop:
                 plt.imshow(getattr(self, f'raw_{channel}'), aspect='equal', cmap=colormap)
@@ -247,15 +248,12 @@ class raw_img():
                 fig, ax = plt.subplots()
                 ax.set_axis_off()
                 interface_px = interface.apply(interface_to_pixel)
-                ax.imshow(np.flipud(img), cmap=colormap)
+                ax.imshow(np.flipud(img), cmap=colormap, vmin=0, vmax=1)
                 ax.plot([box_dims['f_x1']-20, box_dims['f_x1']], [img.shape[0] - box_dims['door']]*2, color='red',lw=1)
                 ax.text(box_dims['f_x1']-10,img.shape[0] - box_dims['door'], 'Top of Door',
                         verticalalignment='bottom', horizontalalignment='center', color='red', fontsize=6)
-                ax.plot(range(analysis_area['x1']+100,analysis_area['width']), interface_px, color='red')
-                # save image
-                # plt.show()
-                # plt.close()
-                # exit()
+                ax.plot(range(analysis_area['x1']+door_strip,analysis_area['width']+analysis_area['x1']), interface_px, color='red')
+
                 plt_name = f'{self.img_loc}{self.ext}/{channel}_channel/{self.filename}.png'
                 plt.savefig(plt_name, bbox_inches='tight', pad_inches=0, dpi=500)
             else:
@@ -265,7 +263,7 @@ class raw_img():
                 # save image
                 plt_name = f'{self.img_loc}{self.ext}/raw_{channel}_channel/{self.filename}.png'
                 plt.imsave(plt_name, np.flipud(0 - getattr(self, f'raw_{channel}')), cmap=colormap, vmin=-1, vmax=0)
-        plt.close()
+        plt.close(fig)
 
     def presentation_frame(self, box_dims, interface, analysis_area, colormap='Greys_r'):
         """method will produce a frame for the presentation video
@@ -281,8 +279,36 @@ class raw_img():
         def interface_to_pixel(x):
             return (box_dims['f_y2'] - box_dims['f_y1']) * x + box_dims['f_y1']
 
-        z0 = self.side_opening_height/300
+        def align_xaxis(ax1, v1, ax2, v2):
+            """adjust ax2 xlimit so that v2 in ax2 is aligned to v1 in ax1"""
+            x1, _ = ax1.transData.transform((v1, 0))
+            x2, _ = ax2.transData.transform((v2, 0))
 
+            # adjust_xaxis(ax2,(x1-x2)/2,v2)
+            # adjust_xaxis(ax1,(x2-x1)/2,v1)
+
+
+            inv = ax2.transData.inverted()
+            dx, _ = inv.transform((0, 0)) - inv.transform((x1-x2, 0))
+            minx, maxx = ax2.get_xlim()
+            ax2.set_xlim(minx+dx, maxx+dx)
+
+
+        # def adjust_xaxis(ax,xdif,v):
+        #     """shift axis ax by xdiff, maintaining point v at the same location"""
+        #     inv = ax.transData.inverted()
+        #     dx, _ = inv.transform((0, 0)) - inv.transform((xdif, 0))
+        #     minx, maxx = ax.get_xlim()
+        #     minx, maxx = minx - v, maxx - v
+        #     if -minx>maxx or (-minx==maxx and dx > 0):
+        #         nminx = minx
+        #         nmaxx = minx*(maxx+dx)/(minx+dx)
+        #     else:
+        #         nmaxx = maxx
+        #         nminx = maxx*(minx+dx)/(maxx+dx)
+        #     ax.set_ylim(nminx+v, nmaxx+v)
+
+        z0 = self.side_opening_height/300
         w0 = self.side_opening_width/300
         at = self.bottom_opening_diameter**2*m.pi/(4*300**2)
 
@@ -299,13 +325,18 @@ class raw_img():
         fig, ax = plt.subplots(1,2, figsize=(10,4))
         ax[0].set_axis_off()
         interface_px = interface[self.time, 'grad'].apply(interface_to_pixel)
-        ax[0].imshow(np.flipud(img), cmap=colormap)
+        ax[0].imshow(np.flipud(img), cmap=colormap, vmin=0,vmax=1)
         ax[0].plot([box_dims['f_x1']-20, box_dims['f_x1']], [img.shape[0] - box_dims['door']]*2, color='red',lw=1)
         ax[0].text(box_dims['f_x1']-10,img.shape[0] - box_dims['door'], 'Top of Door',
-                verticalalignment='bottom', horizontalalignment='center', color='red', fontsize=6)
-
-        ax[0].plot(range(analysis_area['x1']+100,analysis_area['width']), interface_px, color='red')
+                verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=6)
+        # breakpoint()
+        rect = patches.Rectangle((analysis_area['x1']+100, img.shape[0]-analysis_area['y1']),
+                                analysis_area['width']-100, 0-analysis_area['height'],
+                                     linewidth=1, edgecolor='gray', facecolor='none', ls='--')
+        ax[0].add_patch(rect)
+        ax[0].plot(range(analysis_area['x1']+100,analysis_area['width']+analysis_area['x1']), interface_px, color='red')
         density_profile = self.front_rho['box']
+        # breakpoint()
         density_profile.index = pd.Series(density_profile.index.tolist()).apply(lambda x: 1 - x)
         lns1 = ax[1].plot(density_profile['mean'], density_profile.index, color='black', label='density profile')
         ax[1].fill_betweenx(density_profile.index,
@@ -313,10 +344,10 @@ class raw_img():
                            density_profile['mean'] - 2*density_profile['std'],
                            alpha=0.2, color='black')
 
-        ax[1].set_xlim([0,3])
+        ax[1].set_xlim([0,2.5])
         ax[1].set_ylim([0,1])
-        ax[1].set_xlabel('A')
-        ax[1].set_ylabel(r"\$\xi\$")
+        ax[1].set_xlabel(r"$-\ln(I/I_0)$")
+        ax[1].set_ylabel(r"$\hat{h}$")
         asp = np.diff(ax[1].get_xlim())[0] / np.diff(ax[1].get_ylim())[0]
         ax[1].set_aspect(asp)
         ax2 = ax[1].twiny()
@@ -337,14 +368,18 @@ class raw_img():
         ax2.set_xlim([0,max(interface_mean.index)])
         ax2.set_ylim([0,1])
         ax2.tick_params(axis='x', labelcolor='red')
-        ax2.set_xlabel('time(s)', color='red')
+        ax2.set_xlabel('time [s]', color='red')
         # added these three lines
         lns = lns1+lns2+lns3+lns4
+
         labs = [l.get_label() for l in lns]
-        ax[1].legend(lns, labs, loc='upper right')
+        ax[1].legend(lns, labs, loc='lower right')
+        align_xaxis(ax2, 0, ax[1], 0)
         # save image
         plt_name = f'{self.img_loc}{self.ext}/presentation_frames/{self.filename}.png'
         plt.savefig(plt_name, bbox_inches='tight', pad_inches=0, dpi=500)
+        # breakpoint()
+        #plt.show()
         plt.close()
 
 
@@ -467,10 +502,12 @@ class raw_img():
             x2 = x1 + kwargs['door_strip_width']
             for scale, strip in itertools.product(['front', 'back'], ['box', 'door']):
                 use_scale = back_scale if scale == 'back' else front_scale
-                range_tup = (x2-x1, width-x1) if strip == 'box' else (0, x2-x1)
+                range_tup = (x2-x1, width) if strip == 'box' else (0, x2-x1)
+
                 setattr(self, f'{scale}_{strip}_strip',
                         analysis_array[[x for x in range(range_tup[0], range_tup[1])]])
                 getattr(self, f'{scale}_{strip}_strip').set_index(use_scale, inplace=True)
+
             if save:
                 plt.ion()
                 ax = plt.axes()
@@ -566,6 +603,7 @@ class raw_img():
             return rolling_mean
         if 'grad' in methods:
             try:
+
                 def max_gradient(x):
                     rolling_mean = rollingmean(x)
                     return np.argmax(np.abs(np.gradient(rolling_mean)))
@@ -591,6 +629,8 @@ class raw_img():
 
                 self.back_interface[self.time, 'grad'] = self.back_interface[self.time, 'grad'].rolling(
                     25, center=True, min_periods=1).mean()
+
+
             except KeyError as e:
                 print('grad method requires' + str(e) + 'kwarg')
         if 'grad2' in methods:
@@ -885,8 +925,11 @@ def plot_density_transient(df, door, time, save_loc, steadystate=500, number_of_
         # plot box strip
 
         ax1.plot(df[t, 'box', 'mean'], df.index, label=str(t) + ' sec')
-        ax1.fill_betweenx(df.index, df[t, 'box', 'mean']  + 2*df[t, 'box', 'std'],
-                          df[t, 'box', 'mean'] - 2*df[t, 'box', 'std'], alpha=0.2)
+        try:
+            ax1.fill_betweenx(df.index, df[t, 'box', 'mean']  + 2*df[t, 'box', 'std'],
+                              df[t, 'box', 'mean'] - 2*df[t, 'box', 'std'], alpha=0.2)
+        except ValueError:
+            breakpoint()
         ax1.set_xlim([0, plot_width])
         ax1.set_title('Box strip')
 
@@ -1129,4 +1172,63 @@ def grad_2_plot(img, vertical_scale, **kwargs):
         os.mkdir(f'{img.img_loc}analysis/2nddiffcheck')
     plt.savefig(f'{img.img_loc}analysis/2nddiffcheck/{img.filename}.png')
 
+    plt.close()
+
+def image_for_paper(img, box_dims, density, interface, analysis_area, colormap='Greys_r'):
+    img_density = density[density.columns[-2]]
+    # breakpoint()
+    img_interface = interface[interface.columns[-2]]
+    def interface_to_pixel(x):
+            return img.red.shape[0] - (box_dims['f_y2'] - (box_dims['f_y2'] - box_dims['f_y1']) * x)
+    img_interface = img_interface.apply(interface_to_pixel)
+    interface_mean = img_interface.mean()
+    pixels = np.arange(img.red.shape[0] - analysis_area['y1'],
+                       img.red.shape[0] - analysis_area['y1'] - analysis_area['height'],
+                       -1)
+    density_max = img_density.max()
+    def density_profile_to_pixels(x):
+        offset = analysis_area['x1']+ analysis_area['width']/3
+        amplitude = analysis_area['width']/(2*density_max)
+        return x*amplitude + offset
+    density_to_plot = img_density.apply(density_profile_to_pixels)
+
+    ax= plt.axes()
+    ax.imshow(np.flipud(img.red), cmap=colormap, vmin=0, vmax=1)
+    ax.plot(density_to_plot,pixels,'red')
+    ax.plot([box_dims['f_x1'], box_dims['f_x2']], [interface_mean]*2, ls='--', color='r')
+    # rect = patches.Rectangle((analysis_area['x1'], img.red.shape[0]- analysis_area['y1']),
+    #                         analysis_area['width'], 0-analysis_area['height'],
+    #                         linewidth=1, ls='--', edgecolor='r', facecolor='none')
+    # ax.add_patch(rect)
+    ax.set_axis_off()
+    plt.savefig(f'{img.bottom_opening_diameter:0.0f}_{img.side_opening_height:0.0f}_{img.side_opening_width:0.0f}.png',dpi=500)
+    # plt.show()
+    plt.close()
+    # exit()
+
+def density_profiles_compare_channels(img, analysis_area, vertical_scale, door):
+    """will save a figure comparing the density profile [front, box]
+    of the three chanels
+    Arguments:
+        img {raw_img class} -- [description]
+        analysis_area {dict} -- The coordinates of the area to analyse
+        vertical_scale {} -- relate pixels to vertical postion in box
+        door {door scale} -- the height of the door
+    """
+    if not os.path.exists(img.img_loc + 'analysis/compare_channels'):
+        os.mkdir(img.img_loc + 'analysis/compare_channels')
+
+
+    for channel in ['red','green','blue']:
+        img.define_analysis_strips(analysis_area, vertical_scale, channel = channel, door_strip_width=100)
+        plt.plot(img.front_box_strip.mean(axis=1), img.front_box_strip.index, color=channel, label=channel)
+
+    plt.plot([0,3],[door['front']]*2,color='black', label = 'door')
+    plt.xlim([0, 3])
+    plt.ylim([0, 1])
+    plt.xlabel('A')
+    plt.ylabel('h/H')
+    plt.legend(loc='lower right')
+    # plt.show()
+    plt.savefig(f'''{img.img_loc}/analysis/compare_channels/time_{str(img.time)}secs.png''')
     plt.close()
